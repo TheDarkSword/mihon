@@ -99,7 +99,7 @@ class TranslationDebugScreen : Screen() {
                             Button(
                                 enabled = !running,
                                 onClick = {
-                                    val pipeline = TranslationPipeline(context) { null }
+                                    val pipeline = TranslationPipeline(context, apiKey = { null })
                                     log += "Cleared ${pipeline.cache.sizeBytes() / 1024} KB of checkpoints"
                                     pipeline.cache.clear()
                                 },
@@ -151,7 +151,7 @@ class TranslationDebugScreen : Screen() {
             SeriesContext(series = "Return of The Unrivaled Spear Knight")
         }
         try {
-            val pipeline = TranslationPipeline(context) { keys.get(ApiKeyStore.GEMINI) }
+            val pipeline = TranslationPipeline(context, apiKey = { keys.get(ApiKeyStore.GEMINI) })
             val (updated, t) = pipeline.run(
                 key = "debug:${chapter.name}",
                 input = chapter,
@@ -185,7 +185,7 @@ class TranslationDebugScreen : Screen() {
         keys: ApiKeyStore,
         log: (String) -> Unit,
     ) {
-        val pipeline = TranslationPipeline(context) { keys.get(ApiKeyStore.GEMINI) }
+        val pipeline = TranslationPipeline(context, apiKey = { keys.get(ApiKeyStore.GEMINI) })
         val configs = listOf(
             Triple(4, false, 0.25f),
             Triple(6, false, 0.25f),

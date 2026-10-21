@@ -37,7 +37,10 @@ data class LlmResult(
 )
 
 /** Gemini REST client returning schema constrained JSON. Fails fast: at most [ATTEMPTS] tries. */
-class GeminiClient(private val apiKey: () -> String?) {
+class GeminiClient(
+    private val apiKey: () -> String?,
+    private val onCall: (model: String, status: Int) -> Unit = { _, _ -> },
+) {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -115,6 +118,7 @@ class GeminiClient(private val apiKey: () -> String?) {
                 return@repeat
             }
             logcat(LogPriority.INFO, TAG) { "$model attempt ${attempt + 1}: HTTP $code after ${elapsed(start)}" }
+            onCall(model, code)
             if (code != 200) {
                 last = LlmException(code, text.take(300))
                 if (!last!!.isTemporary) throw last!!
@@ -134,6 +138,16 @@ class GeminiClient(private val apiKey: () -> String?) {
             )
         }
         throw last ?: LlmException(0, "Unknown error")
+    }
+
+    /** Null when [key] can list models, otherwise a short error. */
+    suspend fun verify(key: String): String? = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url("$BASE?pageSize=1").header("x-goog-api-key", key).build()
+        try {
+            http.newCall(request).execute().use { if (it.code == 200) null else "HTTP ${it.code}" }
+        } catch (e: IOException) {
+            e.message ?: e::class.simpleName
+        }
     }
 
     private fun elapsed(start: Long) = "${(System.currentTimeMillis() - start) / 1000.0}s"

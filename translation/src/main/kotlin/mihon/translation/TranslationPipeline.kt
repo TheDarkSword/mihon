@@ -48,9 +48,13 @@ data class PipelineTimings(
 )
 
 /** Detect -> OCR -> translate -> review -> typeset -> CBZ, for one chapter, resuming from checkpoints. */
-class TranslationPipeline(private val context: Context, apiKey: () -> String?) {
+class TranslationPipeline(
+    private val context: Context,
+    apiKey: () -> String?,
+    onCall: (model: String, status: Int) -> Unit = { _, _ -> },
+) {
 
-    private val translator = ChapterTranslator(GeminiClient(apiKey))
+    private val translator = ChapterTranslator(GeminiClient(apiKey, onCall))
     val cache = CheckpointCache(File(context.cacheDir, "translation")).also { it.purgeExpired() }
 
     suspend fun run(

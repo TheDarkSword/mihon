@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translation">Traduzione</string>
+    <string name="pref_translation_summary">Chiave Gemini, coda, cache</string>
+    <string name="action_translate">Traduci</string>
+    <string name="action_translate_more">Traduci…</string>
+    <string name="translate_all">Tutti i capitoli</string>
+    <string name="translate_unread">Capitoli non letti</string>
+    <string name="translate_new">Nuovi capitoli (dopo l\'ultimo tradotto)</string>
+    <string name="translate_missing">Capitoli mancanti</string>
+    <string name="translate_range">Intervallo</string>
+    <string name="translate_range_from">Dal capitolo</string>
+    <string name="translate_range_to">Al capitolo</string>
+    <string name="translation_show">Mostra le traduzioni</string>
+    <string name="translation_queued">%d capitoli aggiunti alla coda di traduzione</string>
+    <string name="translation_nothing_to_queue">Nessun capitolo da tradurre</string>
+    <string name="translation_missing_key">Aggiungi una chiave API di Gemini in Impostazioni → Traduzione</string>
+    <string name="translation_notification_title">Traduzione in corso</string>
+    <string name="translation_notification_progress">%1$s · capitolo %2$s</string>
+    <string name="translation_notification_queue">%d capitoli rimanenti</string>
+    <string name="translation_quota_paused">Quota giornaliera esaurita: la traduzione riprende dopo il reset</string>
+    <string name="translation_failed">Traduzione non riuscita: %s</string>
+    <string name="translation_done">%d capitoli tradotti</string>
+    <string name="pref_translation_api">API Gemini</string>
+    <string name="pref_gemini_key">Chiave API</string>
+    <string name="pref_gemini_key_missing">Non impostata</string>
+    <string name="pref_gemini_key_set">Salvata su questo dispositivo, cifrata</string>
+    <string name="pref_gemini_key_get">Ottieni una chiave gratuita</string>
+    <string name="pref_gemini_key_verify">Verifica chiave</string>
+    <string name="pref_gemini_key_ok">La chiave funziona</string>
+    <string name="pref_gemini_key_error">La chiave non funziona: %s</string>
+    <string name="pref_translation_requests_today">Richieste oggi: %d</string>
+    <string name="pref_translation_behaviour">Comportamento</string>
+    <string name="pref_translation_delete_original">Elimina l\'originale dopo la traduzione</string>
+    <string name="pref_translation_delete_original_summary">Tieni solo il capitolo in italiano</string>
+    <string name="pref_translation_queue">Coda</string>
+    <string name="pref_translation_queue_summary">%d capitoli in attesa</string>
+    <string name="pref_translation_queue_clear">Svuota la coda</string>
+    <string name="pref_translation_cache">Svuota la cache di lavoro</string>
+    <string name="pref_translation_cache_summary">%s di risultati intermedi</string>
+</resources>

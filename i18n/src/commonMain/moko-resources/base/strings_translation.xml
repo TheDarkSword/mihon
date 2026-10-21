@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translation">Translation</string>
+    <string name="pref_translation_summary">Gemini key, queue, cache</string>
+    <string name="action_translate">Translate</string>
+    <string name="action_translate_more">Translate…</string>
+    <string name="translate_all">All chapters</string>
+    <string name="translate_unread">Unread chapters</string>
+    <string name="translate_new">New chapters (after the last translated)</string>
+    <string name="translate_missing">Missing chapters</string>
+    <string name="translate_range">Range</string>
+    <string name="translate_range_from">From chapter</string>
+    <string name="translate_range_to">To chapter</string>
+    <string name="translation_show">Show translations</string>
+    <string name="translation_queued">%d chapters added to the translation queue</string>
+    <string name="translation_nothing_to_queue">No chapters to translate</string>
+    <string name="translation_missing_key">Add a Gemini API key in Settings → Translation</string>
+    <string name="translation_notification_title">Translating</string>
+    <string name="translation_notification_progress">%1$s · chapter %2$s</string>
+    <string name="translation_notification_queue">%d chapters left</string>
+    <string name="translation_quota_paused">Daily quota used up: translation resumes after the reset</string>
+    <string name="translation_failed">Translation failed: %s</string>
+    <string name="translation_done">%d chapters translated</string>
+    <string name="pref_translation_api">Gemini API</string>
+    <string name="pref_gemini_key">API key</string>
+    <string name="pref_gemini_key_missing">Not set</string>
+    <string name="pref_gemini_key_set">Saved on this device, encrypted</string>
+    <string name="pref_gemini_key_get">Get a free key</string>
+    <string name="pref_gemini_key_verify">Verify key</string>
+    <string name="pref_gemini_key_ok">Key works</string>
+    <string name="pref_gemini_key_error">Key not working: %s</string>
+    <string name="pref_translation_requests_today">Requests today: %d</string>
+    <string name="pref_translation_behaviour">Behaviour</string>
+    <string name="pref_translation_delete_original">Delete the original after translating</string>
+    <string name="pref_translation_delete_original_summary">Keep only the Italian chapter</string>
+    <string name="pref_translation_queue">Queue</string>
+    <string name="pref_translation_queue_summary">%d chapters waiting</string>
+    <string name="pref_translation_queue_clear">Clear queue</string>
+    <string name="pref_translation_cache">Clear work cache</string>
+    <string name="pref_translation_cache_summary">%s of intermediate results</string>
+</resources>
