@@ -16,6 +16,7 @@ import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.AppBarTitle
 import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.manga.DownloadAction
+import mihon.fork.translation.MangaToolbarExtras
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Download
 import mihon.icons.materialsymbols.rounded.FilterList
@@ -91,6 +92,7 @@ fun MangaToolbar(
                                 onClick = onInvertSelection,
                             ),
                         )
+                        addAll(MangaToolbarExtras.selection(title))
                         return@buildList
                     }
                     if (onClickDownload != null) {
@@ -146,6 +148,7 @@ fun MangaToolbar(
                             onClick = onClickEditNotes,
                         ),
                     )
+                    addAll(MangaToolbarExtras.overflow(title))
                 },
             )
         },

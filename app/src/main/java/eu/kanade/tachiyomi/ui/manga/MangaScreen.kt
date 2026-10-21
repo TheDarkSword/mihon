@@ -58,6 +58,7 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.feature.migration.config.MigrationConfigScreen
 import mihon.feature.migration.dialog.MigrateMangaDialog
+import mihon.fork.translation.MangaTranslationActions
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
@@ -105,6 +106,7 @@ class MangaScreen(
             }
         }
 
+        MangaTranslationActions(viewModel, successState)
         MangaScreen(
             state = successState,
             snackbarHostState = viewModel.snackbarHostState,

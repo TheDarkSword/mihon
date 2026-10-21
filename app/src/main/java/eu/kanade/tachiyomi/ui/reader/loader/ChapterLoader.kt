@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
+import mihon.core.metro.metroGraph
+import mihon.fork.translation.TranslationGraph
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.manga.model.Manga
@@ -84,6 +86,8 @@ class ChapterLoader(
      */
     private suspend fun getPageLoader(chapter: ReaderChapter): PageLoader {
         val dbChapter = chapter.chapter
+        context.metroGraph<TranslationGraph>().translationManager.translatedArchive(manga, dbChapter)
+            ?.let { return ArchivePageLoader(it.archiveReader(context)) }
         val isDownloaded = downloadManager.isChapterDownloadedOnDisk(
             dbChapter.name,
             dbChapter.scanlator,
