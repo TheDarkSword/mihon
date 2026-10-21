@@ -46,4 +46,5 @@
     <string name="pref_translation_delete_all">Elimina tutte le traduzioni</string>
     <string name="pref_translation_delete_all_summary">Capitoli tradotti di tutte le serie</string>
     <string name="pref_translation_delete_all_confirm">Eliminare tutti i capitoli tradotti di tutte le serie? I contesti di traduzione restano.</string>
+    <string name="translation_already_queued">%d capitoli già nella coda di traduzione</string>
 </resources>

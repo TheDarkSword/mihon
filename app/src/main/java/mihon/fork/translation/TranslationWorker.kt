@@ -9,6 +9,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.hippo.unifile.UniFile
@@ -85,11 +86,16 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                 start(applicationContext, pausedUntil - System.currentTimeMillis())
                 return Result.success()
             }
-            val job = manager.next() ?: break
+            val next = manager.next() ?: break
             if (!manager.hasKey()) {
                 notify(ID_RESULT, applicationContext.getString(R.string.translation_missing_key))
                 return Result.failure()
             }
+            if (next.attempts >= MAX_ATTEMPTS) {
+                fail(next, "too many attempts")
+                continue
+            }
+            val job = manager.beginAttempt(next)
             try {
                 translate(job, pipeline)
                 manager.remove(job)
@@ -99,10 +105,12 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             } catch (e: LlmException) {
                 logcat(LogPriority.WARN, TAG) { "Chapter ${job.number}: ${e.status} ${e.message}" }
                 when {
-                    e.status == 429 && e.message.orEmpty().contains("PerDay", ignoreCase = true) ->
+                    e.status == 429 && e.message.orEmpty().contains("PerDay", ignoreCase = true) -> {
+                        // Not the chapter's fault: the attempt is given back
+                        manager.refundAttempt(job)
                         preferences.pausedUntil.set(manager.nextQuotaReset())
+                    }
                     e.isTemporary && job.attempts < MAX_ATTEMPTS -> {
-                        manager.retryLater(job)
                         delay(if (e.status == 429) 60.seconds else 30.seconds)
                     }
                     else -> fail(job, e.message ?: "HTTP ${e.status}")
@@ -110,7 +118,6 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, TAG) { e.asLog() }
                 if (job.attempts < MAX_ATTEMPTS) {
-                    manager.retryLater(job)
                     delay(30.seconds)
                 } else {
                     fail(job, e.message ?: e::class.simpleName)
@@ -241,12 +248,21 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         private const val ID_RESULT = -802
         private const val MAX_ATTEMPTS = 3
 
+        /**
+         * Starts the queue unless a worker is already running it. A worker left waiting by a crash or a backoff
+         * is replaced so the queue resumes right away. Blocking: call it off the main thread.
+         */
         fun start(context: Context, delayMillis: Long = 0) {
+            val workManager = WorkManager.getInstance(context)
+            val running = workManager.getWorkInfosForUniqueWork(WORK_NAME).get().any {
+                it.state ==
+                    WorkInfo.State.RUNNING
+            }
+            if (running && delayMillis == 0L) return
             val request = OneTimeWorkRequestBuilder<TranslationWorker>()
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .build()
-            val policy = if (delayMillis > 0) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
-            WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, policy, request)
+            workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
 
         fun ensureChannel(context: Context) {

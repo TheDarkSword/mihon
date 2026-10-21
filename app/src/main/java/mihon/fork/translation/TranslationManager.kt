@@ -45,18 +45,27 @@ class TranslationManager(
 
     fun hasKey() = !keys.get(ApiKeyStore.GEMINI).isNullOrBlank()
 
-    /** Adds the chapters not translated nor queued yet, in reading order, and starts the worker. */
-    fun enqueue(manga: Manga, chapters: List<Chapter>): Int {
+    data class Enqueued(val added: Int, val alreadyQueued: Int)
+
+    /** Adds the chapters not translated nor queued yet, in reading order, and makes sure the worker runs. */
+    fun enqueue(manga: Manga, chapters: List<Chapter>): Enqueued {
         val queued = _queue.value.map { it.chapterId }.toSet()
-        val jobs = chapters
-            .filter { it.chapterNumber >= 0 && it.id !in queued && !storage.isTranslated(manga, it) }
+        val candidates = chapters.filter { it.chapterNumber >= 0 && !storage.isTranslated(manga, it) }
+        val jobs = candidates
+            .filter { it.id !in queued }
             .sortedBy { it.chapterNumber }
             .map { TranslationJob(manga.id, it.id, it.chapterNumber, manga.title) }
-        if (jobs.isEmpty()) return 0
-        _queue.update { inReadingOrder(it + jobs) }
-        save()
-        TranslationWorker.start(context)
-        return jobs.size
+        if (jobs.isNotEmpty()) {
+            _queue.update { inReadingOrder(it + jobs) }
+            save()
+        }
+        if (_queue.value.isNotEmpty()) TranslationWorker.start(context)
+        return Enqueued(jobs.size, candidates.size - jobs.size)
+    }
+
+    /** Resumes a queue left behind, e.g. after the app was killed. Blocking. */
+    fun resumeIfNeeded() {
+        if (_queue.value.isNotEmpty() && hasKey()) TranslationWorker.start(context)
     }
 
     fun next(): TranslationJob? = _queue.value.firstOrNull()
@@ -66,14 +75,24 @@ class TranslationManager(
         save()
     }
 
-    /** Counts a failed try while keeping the job in place, so later chapters never overtake it. */
-    fun retryLater(job: TranslationJob) {
+    /**
+     * Counts the attempt before working on the job: if the process dies halfway (e.g. a native crash) the next
+     * run still sees it, so a chapter that keeps crashing is eventually dropped instead of looping.
+     */
+    fun beginAttempt(job: TranslationJob): TranslationJob {
+        val started = job.copy(attempts = job.attempts + 1)
+        _queue.update { queue -> queue.map { if (it.chapterId == job.chapterId) started else it } }
+        save()
+        return started
+    }
+
+    fun refundAttempt(job: TranslationJob) {
         _queue.update { queue ->
             queue.map {
                 if (it.chapterId ==
                     job.chapterId
                 ) {
-                    it.copy(attempts = it.attempts + 1)
+                    it.copy(attempts = (it.attempts - 1).coerceAtLeast(0))
                 } else {
                     it
                 }

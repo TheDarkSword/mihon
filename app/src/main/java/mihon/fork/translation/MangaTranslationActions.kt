@@ -71,7 +71,10 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 
     LaunchedEffect(manga.id) {
         TranslatedChapters.register(manga)
-        withContext(Dispatchers.IO) { storage.translated(manga) }
+        withContext(Dispatchers.IO) {
+            storage.translated(manga)
+            manager.resumeIfNeeded()
+        }
     }
 
     fun enqueue(pick: (List<Chapter>, Set<String>) -> List<Chapter>) {
@@ -81,15 +84,15 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
         }
         val chapters = state.chapters.map { it.chapter }
         scope.launch {
-            val added =
+            val result =
                 withContext(Dispatchers.IO) { manager.enqueue(manga, pick(chapters, storage.translated(manga))) }
-            context.toast(
-                if (added > 0) {
-                    context.getString(tachiyomi.i18n.R.string.translation_queued, added)
-                } else {
-                    context.getString(tachiyomi.i18n.R.string.translation_nothing_to_queue)
-                },
-            )
+            val message = when {
+                result.added > 0 -> context.getString(tachiyomi.i18n.R.string.translation_queued, result.added)
+                result.alreadyQueued > 0 ->
+                    context.getString(tachiyomi.i18n.R.string.translation_already_queued, result.alreadyQueued)
+                else -> context.getString(tachiyomi.i18n.R.string.translation_nothing_to_queue)
+            }
+            context.toast(message)
         }
     }
 

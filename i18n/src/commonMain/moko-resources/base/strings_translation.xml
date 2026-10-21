@@ -47,4 +47,5 @@
     <string name="pref_translation_delete_all">Delete all translations</string>
     <string name="pref_translation_delete_all_summary">Translated chapters of every series</string>
     <string name="pref_translation_delete_all_confirm">Delete every translated chapter of every series? Translation contexts are kept.</string>
+    <string name="translation_already_queued">%d chapters already in the translation queue</string>
 </resources>
