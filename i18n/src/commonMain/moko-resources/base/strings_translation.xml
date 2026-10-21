@@ -38,4 +38,13 @@
     <string name="pref_translation_queue_clear">Clear queue</string>
     <string name="pref_translation_cache">Clear work cache</string>
     <string name="pref_translation_cache_summary">%s of intermediate results</string>
+    <string name="translation_auto">Translate new chapters automatically</string>
+    <string name="translation_badge" translatable="false">IT</string>
+    <string name="action_auto_scroll">Auto-scroll</string>
+    <string name="translation_delete_chapter">Delete the translation of chapter %s?</string>
+    <string name="translation_delete_all_manga">Delete all translated chapters</string>
+    <string name="translation_delete_all_manga_confirm">Delete every translated chapter of this series? Its translation context is kept, so new translations stay consistent.</string>
+    <string name="pref_translation_delete_all">Delete all translations</string>
+    <string name="pref_translation_delete_all_summary">Translated chapters of every series</string>
+    <string name="pref_translation_delete_all_confirm">Delete every translated chapter of every series? Translation contexts are kept.</string>
 </resources>

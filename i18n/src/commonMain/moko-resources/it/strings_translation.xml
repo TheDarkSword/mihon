@@ -38,4 +38,12 @@
     <string name="pref_translation_queue_clear">Svuota la coda</string>
     <string name="pref_translation_cache">Svuota la cache di lavoro</string>
     <string name="pref_translation_cache_summary">%s di risultati intermedi</string>
+    <string name="translation_auto">Traduci in automatico i nuovi capitoli</string>
+    <string name="action_auto_scroll">Auto-scroll</string>
+    <string name="translation_delete_chapter">Eliminare la traduzione del capitolo %s?</string>
+    <string name="translation_delete_all_manga">Elimina tutti i capitoli tradotti</string>
+    <string name="translation_delete_all_manga_confirm">Eliminare tutti i capitoli tradotti di questa serie? Il contesto di traduzione resta, così le nuove traduzioni restano coerenti.</string>
+    <string name="pref_translation_delete_all">Elimina tutte le traduzioni</string>
+    <string name="pref_translation_delete_all_summary">Capitoli tradotti di tutte le serie</string>
+    <string name="pref_translation_delete_all_confirm">Eliminare tutti i capitoli tradotti di tutte le serie? I contesti di traduzione restano.</string>
 </resources>

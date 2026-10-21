@@ -48,6 +48,7 @@ import mihon.app.di.appGraph
 import mihon.core.metro.metroGraph
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
+import mihon.fork.translation.AutoTranslation
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.system.logcat
@@ -288,6 +289,7 @@ class LibraryUpdateWorker(private val context: Context, workerParams: WorkerPara
                                                 downloadChapters(manga, chaptersToDownload)
                                                 hasDownloads.store(true)
                                             }
+                                            AutoTranslation.onNewChapters(context, manga, newChapters)
 
                                             // Sources update concurrently, and getAndSet is a separate read and write
                                             synchronized(libraryPreferences.newUpdatesCount) {

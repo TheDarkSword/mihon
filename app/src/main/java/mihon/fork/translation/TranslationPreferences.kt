@@ -14,6 +14,9 @@ class TranslationPreferences(preferenceStore: PreferenceStore) {
     /** Manga ids for which the reader shows the original chapters. */
     val originalManga = preferenceStore.getStringSet("translation_original_manga", emptySet())
 
+    /** Manga ids whose new chapters are queued as soon as a library update finds them. */
+    val autoManga = preferenceStore.getStringSet("translation_auto_manga", emptySet())
+
     val requestsDay = preferenceStore.getString("translation_requests_day", "")
 
     val requestsCount = preferenceStore.getInt("translation_requests_count", 0)

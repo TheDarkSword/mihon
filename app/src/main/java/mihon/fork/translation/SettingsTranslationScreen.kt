@@ -52,6 +52,27 @@ object SettingsTranslationScreen : SearchableSettings {
         val requests by preferences.requestsCount.collectAsState()
         val cache = remember { CheckpointCache(File(context.cacheDir, "translation")) }
         var cacheSize by remember { mutableLongStateOf(cache.sizeBytes()) }
+        var confirmDeleteAll by remember { mutableStateOf(false) }
+
+        if (confirmDeleteAll) {
+            AlertDialog(
+                onDismissRequest = { confirmDeleteAll = false },
+                text = { Text(stringResource(MR.strings.pref_translation_delete_all_confirm)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmDeleteAll = false
+                            scope.launch(Dispatchers.IO) { graph.translationStorage.deleteAllChapters() }
+                        },
+                    ) { Text(stringResource(MR.strings.action_delete)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        confirmDeleteAll = false
+                    }) { Text(stringResource(MR.strings.action_cancel)) }
+                },
+            )
+        }
 
         if (editKey) {
             var value by remember { mutableStateOf("") }
@@ -136,6 +157,11 @@ object SettingsTranslationScreen : SearchableSettings {
                         title = stringResource(MR.strings.pref_translation_queue_clear),
                         subtitle = stringResource(MR.strings.pref_translation_queue_summary, queue.size),
                         onClick = { manager.clear() },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_translation_delete_all),
+                        subtitle = stringResource(MR.strings.pref_translation_delete_all_summary),
+                        onClick = { confirmDeleteAll = true },
                     ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(MR.strings.pref_translation_cache),

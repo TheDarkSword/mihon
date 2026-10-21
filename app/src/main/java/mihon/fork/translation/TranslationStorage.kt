@@ -14,7 +14,6 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.storage.service.StoragePreferences
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Translated series live in `<Mihon folder>/translations/<title>/`: one CBZ per chapter, named by chapter
@@ -30,8 +29,6 @@ class TranslationStorage(
     @Serializable
     data class SeriesLink(val sourceId: Long, val mangaUrl: String, val title: String)
 
-    private val numbers = ConcurrentHashMap<Long, Set<String>>()
-
     private fun root(): UniFile? {
         val base = UniFile.fromUri(context, storagePreferences.baseStorageDirectory.get().toUri()) ?: return null
         return base.findFile(ROOT) ?: base.createDirectory(ROOT)
@@ -43,7 +40,12 @@ class TranslationStorage(
         val link = SeriesLink(manga.source, manga.url, manga.title)
         root.findFile(name)?.let { dir ->
             val stored = readLink(dir)
-            if (stored == null || (stored.sourceId == link.sourceId && stored.mangaUrl == link.mangaUrl)) return dir
+            if (stored == null || stored == link) return dir
+            // Sources change URLs over time: same title and source is still the same series
+            if (stored.sourceId == link.sourceId) {
+                write(dir, LINK_FILE, TranslationPipeline.json.encodeToString(SeriesLink.serializer(), link))
+                return dir
+            }
         }
         // Same title from another source gets its own folder
         val fallback = "$name [${manga.source}]"
@@ -62,8 +64,9 @@ class TranslationStorage(
         return seriesDir(manga)?.findFile(chapterName(chapter))
     }
 
-    fun translated(manga: Manga): Set<String> = numbers.getOrPut(manga.id) {
-        seriesDir(manga)?.listFiles()?.mapNotNull { it.name?.takeIf { n -> n.endsWith(".cbz") } }?.toSet().orEmpty()
+    fun translated(manga: Manga): Set<String> = TranslatedChapters.get(manga.id) ?: run {
+        val names = seriesDir(manga)?.listFiles()?.mapNotNull { it.name?.takeIf { n -> n.endsWith(".cbz") } }
+        names.orEmpty().toSet().also { TranslatedChapters.set(manga.id, it) }
     }
 
     fun isTranslated(manga: Manga, chapter: Chapter) =
@@ -75,7 +78,27 @@ class TranslationStorage(
         dir.findFile(name)?.delete()
         val target = dir.createFile(name) ?: error("Cannot create $name")
         target.openOutputStream().use { out -> cbz.inputStream().use { it.copyTo(out) } }
-        numbers[manga.id] = translated(manga) + name
+        TranslatedChapters.set(manga.id, translated(manga) + name)
+    }
+
+    fun deleteChapter(manga: Manga, chapter: Chapter) {
+        val name = chapterName(chapter)
+        seriesDir(manga)?.findFile(name)?.delete()
+        TranslatedChapters.set(manga.id, translated(manga) - name)
+    }
+
+    /** Removes the translated chapters of a series, keeping its link and translation context. */
+    fun deleteChapters(manga: Manga) {
+        seriesDir(manga)?.listFiles()?.filter { it.name?.endsWith(".cbz") == true }?.forEach { it.delete() }
+        TranslatedChapters.set(manga.id, emptySet())
+    }
+
+    /** Removes the translated chapters of every series, keeping links and contexts. */
+    fun deleteAllChapters() {
+        root()?.listFiles()?.forEach { dir ->
+            dir.listFiles()?.filter { it.name?.endsWith(".cbz") == true }?.forEach { it.delete() }
+        }
+        TranslatedChapters.clear()
     }
 
     fun readContext(manga: Manga): SeriesContext? = seriesDir(manga)?.findFile(CONTEXT_FILE)

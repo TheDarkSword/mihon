@@ -64,6 +64,7 @@ fun MangaChapterListItem(
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
+    badge: @Composable () -> Unit = {},
 ) {
     val start = getSwipeAction(
         action = chapterSwipeStartAction,
@@ -171,6 +172,7 @@ fun MangaChapterListItem(
                 }
             }
 
+            badge()
             ChapterDownloadIndicator(
                 enabled = downloadIndicatorEnabled,
                 modifier = Modifier.padding(start = 4.dp),

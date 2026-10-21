@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,13 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     val manga = state.manga
     var showDialog by remember { mutableStateOf(false) }
 
+    var confirmDeleteAll by remember { mutableStateOf(false) }
+
+    LaunchedEffect(manga.id) {
+        TranslatedChapters.register(manga)
+        withContext(Dispatchers.IO) { storage.translated(manga) }
+    }
+
     fun enqueue(pick: (List<Chapter>, Set<String>) -> List<Chapter>) {
         if (!manager.hasKey()) {
             context.toast(MR.strings.translation_missing_key)
@@ -86,6 +95,7 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 
     val translateTitle = stringResource(MR.strings.action_translate)
     val moreTitle = stringResource(MR.strings.action_translate_more)
+    val autoScrollTitle = stringResource(MR.strings.action_auto_scroll)
     val selected = state.selectedChapters
     val actions = remember(selected, translateTitle) {
         MangaToolbarExtras.Actions(
@@ -100,7 +110,10 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                     },
                 ),
             ),
-            overflow = listOf(AppBar.OverflowAction(title = moreTitle, onClick = { showDialog = true })),
+            overflow = listOf(
+                AppBar.OverflowAction(title = moreTitle, onClick = { showDialog = true }),
+                AppBar.OverflowAction(title = autoScrollTitle, onClick = { ChapterAutoScroll.request(manga.id) }),
+            ),
         )
     }
     DisposableEffect(manga.title, actions) {
@@ -108,10 +121,34 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
         onDispose { MangaToolbarExtras.remove(manga.title) }
     }
 
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            text = { Text(stringResource(MR.strings.translation_delete_all_manga_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDeleteAll = false
+                        scope.launch { deleteTranslations(context, manga) }
+                    },
+                ) { Text(stringResource(MR.strings.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteAll = false }) { Text(stringResource(MR.strings.action_cancel)) }
+            },
+        )
+    }
+
     if (showDialog) {
         TranslateDialog(
             showTranslation = manager.showsTranslation(manga),
             onShowTranslation = { manager.setShowTranslation(manga, it) },
+            autoTranslate = AutoTranslation.isEnabled(context, manga),
+            onDeleteAll = {
+                showDialog = false
+                confirmDeleteAll = true
+            },
+            onAutoTranslate = { AutoTranslation.setEnabled(context, manga, it) },
             onDismiss = { showDialog = false },
             onPick = { pick ->
                 showDialog = false
@@ -125,10 +162,14 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 private fun TranslateDialog(
     showTranslation: Boolean,
     onShowTranslation: (Boolean) -> Unit,
+    autoTranslate: Boolean,
+    onDeleteAll: () -> Unit,
+    onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onPick: ((List<Chapter>, Set<String>) -> List<Chapter>) -> Unit,
 ) {
     var show by remember { mutableStateOf(showTranslation) }
+    var auto by remember { mutableStateOf(autoTranslate) }
     var from by remember { mutableStateOf("") }
     var to by remember { mutableStateOf("") }
     AlertDialog(
@@ -136,6 +177,12 @@ private fun TranslateDialog(
         title = { Text(stringResource(MR.strings.translation)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDeleteAll) {
+                    Text(
+                        stringResource(MR.strings.translation_delete_all_manga),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 TextButton(onClick = { onPick { chapters, _ -> chapters } }) {
                     Text(stringResource(MR.strings.translate_all))
                 }
@@ -178,6 +225,16 @@ private fun TranslateDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(MR.strings.translate_range))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(MR.strings.translation_auto), modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = auto,
+                        onCheckedChange = {
+                            auto = it
+                            onAutoTranslate(it)
+                        },
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(MR.strings.translation_show), modifier = Modifier.weight(1f))

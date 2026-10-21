@@ -61,6 +61,8 @@ import eu.kanade.tachiyomi.source.getNameForMangaInfo
 import eu.kanade.tachiyomi.ui.manga.ChapterList
 import eu.kanade.tachiyomi.ui.manga.MangaViewModel
 import eu.kanade.tachiyomi.util.system.copyToClipboard
+import mihon.fork.translation.ChapterAutoScroll
+import mihon.fork.translation.TranslatedChapterBadge
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.roundedfilled.PlayArrow
 import tachiyomi.domain.chapter.model.Chapter
@@ -270,6 +272,7 @@ private fun MangaScreenSmallImpl(
             third = state.isAnySelected,
         )
     }
+    ChapterAutoScroll.Effect(state.manga, chapterListState, listItem, firstChapterIndex = 4)
 
     BackHandler(enabled = isAnySelected) {
         onAllChapterSelected(false)
@@ -508,6 +511,7 @@ fun MangaScreenLargeImpl(
     var topBarHeight by remember { mutableIntStateOf(0) }
 
     val chapterListState = rememberLazyListState()
+    ChapterAutoScroll.Effect(state.manga, chapterListState, listItem, firstChapterIndex = 1)
 
     BackHandler(enabled = isAnySelected) {
         onAllChapterSelected(false)
@@ -766,6 +770,7 @@ private fun LazyListScope.sharedChapterItems(
                     downloadIndicatorEnabled = !isAnyChapterSelected && !manga.isLocal(),
                     downloadStateProvider = { item.downloadState },
                     downloadProgressProvider = { downloadProgressProvider(item.id) },
+                    badge = { TranslatedChapterBadge(item.chapter) },
                     chapterSwipeStartAction = chapterSwipeStartAction,
                     chapterSwipeEndAction = chapterSwipeEndAction,
                     onLongClick = {
