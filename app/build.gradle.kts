@@ -449,3 +449,5 @@ androidComponents {
         it.packaging.resources.excludes.add("META-INF/*.version")
     }
 }
+
+mihon.gradle.Fork.configure(project)
