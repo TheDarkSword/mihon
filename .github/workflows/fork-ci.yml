@@ -38,7 +38,7 @@ jobs:
 
       - name: Check and build
         run: >
-          ./gradlew spotlessCheck verifySqlDelightMigration testReleaseUnitTest assembleRelease
+          ./gradlew spotlessCheck verifySqlDelightMigration testDebugUnitTest assembleRelease
           -Pdist=foss -Penable-updater=false
 
       - name: Upload APK

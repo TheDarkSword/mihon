@@ -36,7 +36,7 @@ runs:
     - name: Check and build
       shell: bash
       run: >
-        ./gradlew spotlessCheck verifySqlDelightMigration testReleaseUnitTest assembleRelease
+        ./gradlew spotlessCheck verifySqlDelightMigration testDebugUnitTest assembleRelease
         -Pdist=foss -Penable-updater=false -Pfork.build=${{ inputs.build-number }}
       env:
         MIHON_GITHUB_RELEASE: true
