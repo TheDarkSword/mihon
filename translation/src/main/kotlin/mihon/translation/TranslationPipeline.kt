@@ -52,9 +52,10 @@ class TranslationPipeline(
     private val context: Context,
     apiKey: () -> String?,
     onCall: (model: String, status: Int) -> Unit = { _, _ -> },
+    reviewModels: () -> List<String> = { ChapterTranslator.FAST_REVIEW },
 ) {
 
-    private val translator = ChapterTranslator(GeminiClient(apiKey, onCall))
+    private val translator = ChapterTranslator(GeminiClient(apiKey, onCall), reviewModels = reviewModels)
     val cache = CheckpointCache(File(context.cacheDir, "translation")).also { it.purgeExpired() }
 
     suspend fun run(

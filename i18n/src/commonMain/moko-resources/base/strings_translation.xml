@@ -48,4 +48,9 @@
     <string name="pref_translation_delete_all_summary">Translated chapters of every series</string>
     <string name="pref_translation_delete_all_confirm">Delete every translated chapter of every series? Translation contexts are kept.</string>
     <string name="translation_already_queued">%d chapters already in the translation queue</string>
+    <string name="pref_translation_quality_review">Higher quality review</string>
+    <string name="pref_translation_quality_review_summary">Gemini 3.6, 3 and 3.8 Flash proofread each chapter while their daily quota lasts</string>
+    <string name="pref_translation_quality_review_warning">The review uses Gemini 3.6, 3 and 3.8 Flash, which fix far more than the fast reviewer: forms of address (tu/voi/lei) kept consistent, titles such as Maestà, unnatural phrasing.\n\nEach chapter takes about 40 seconds longer, up to 3–4 minutes when the servers are busy.\n\nTheir free quota covers about 60 chapters a day; after that the fast review is used automatically.</string>
+    <string name="translation_enable">Enable</string>
+    <string name="translation_quality_fallback">Gemini Flash daily quota used up: the fast review is used until the reset</string>
 </resources>

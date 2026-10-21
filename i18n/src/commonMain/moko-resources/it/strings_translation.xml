@@ -47,4 +47,9 @@
     <string name="pref_translation_delete_all_summary">Capitoli tradotti di tutte le serie</string>
     <string name="pref_translation_delete_all_confirm">Eliminare tutti i capitoli tradotti di tutte le serie? I contesti di traduzione restano.</string>
     <string name="translation_already_queued">%d capitoli già nella coda di traduzione</string>
+    <string name="pref_translation_quality_review">Revisione di qualità superiore</string>
+    <string name="pref_translation_quality_review_summary">Gemini 3.6, 3 e 3.8 Flash rileggono ogni capitolo finché dura la loro quota giornaliera</string>
+    <string name="pref_translation_quality_review_warning">La revisione usa Gemini 3.6, 3 e 3.8 Flash, che correggono molto più della revisione veloce: tu/voi/lei coerenti, titoli come Maestà, frasi innaturali.\n\nOgni capitolo richiede circa 40 secondi in più, fino a 3–4 minuti quando i server sono carichi.\n\nLa loro quota gratuita copre circa 60 capitoli al giorno: dopo si passa da sola alla revisione veloce.</string>
+    <string name="translation_enable">Attiva</string>
+    <string name="translation_quality_fallback">Quota giornaliera dei modelli Flash esaurita: si usa la revisione veloce fino al reset</string>
 </resources>

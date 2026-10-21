@@ -27,6 +27,28 @@ import mihon.translation.model.TextBlock
 import mihon.translation.model.TranslatedLine
 import kotlin.math.roundToInt
 
+/** Models whose free daily quota ran out, forgotten when the quota resets at midnight Pacific time. */
+class DailyQuota {
+    private val zone = java.time.ZoneId.of("America/Los_Angeles")
+    private var day = java.time.LocalDate.now(zone)
+    private val models = mutableSetOf<String>()
+
+    @Synchronized
+    fun isExhausted(model: String): Boolean {
+        val today = java.time.LocalDate.now(zone)
+        if (today != day) {
+            day = today
+            models.clear()
+        }
+        return model in models
+    }
+
+    @Synchronized
+    fun mark(model: String) {
+        models += model
+    }
+}
+
 @Serializable
 data class TranslationStats(
     val lines: Int,
@@ -39,13 +61,13 @@ data class TranslationStats(
     val namesFixed: Int,
     val glitches: Int,
     val reviewError: String?,
+    val reviewModel: String? = null,
 )
 
 class ChapterTranslator(
     private val client: GeminiClient,
     private val model: String = "gemini-3.5-flash-lite",
-    // 3.1 often answers 503 only after ~25 s, so it is just the fallback for when 3.5 runs out of quota
-    private val reviewModels: List<String> = listOf("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"),
+    private val reviewModels: () -> List<String> = { FAST_REVIEW },
 ) {
 
     data class Result(val lines: List<TranslatedLine>, val context: SeriesContext, val stats: TranslationStats)
@@ -63,7 +85,13 @@ class ChapterTranslator(
     )
 
     @Serializable
-    data class Reviewed(val lines: List<TranslatedLine>, val fixes: Int, val millis: Long, val error: String?)
+    data class Reviewed(
+        val lines: List<TranslatedLine>,
+        val fixes: Int,
+        val millis: Long,
+        val error: String?,
+        val model: String? = null,
+    )
 
     suspend fun draft(
         ctx: SeriesContext,
@@ -124,12 +152,15 @@ class ChapterTranslator(
         val view = ContextBudget.forChapter(ctx, chapter)
         val lines = draft.lines.map { it.copy(it = enforceNames(it.it, view).first) }
         var error: String? = null
-        for (reviewModel in reviewModels) {
+        for (reviewModel in reviewModels().filterNot { exhausted.isExhausted(it) }) {
             try {
                 val (out, fixes, millis) = review(reviewModel, view, chapter, lines)
-                return Reviewed(out, fixes, millis, null)
+                return Reviewed(out, fixes, millis, null, reviewModel)
             } catch (e: LlmException) {
                 if (!e.isTemporary) throw e
+                if (e.status == 429 && e.message.orEmpty().contains("PerDay", ignoreCase = true)) {
+                    exhausted.mark(reviewModel)
+                }
                 error = "$reviewModel: ${e.status}"
             }
         }
@@ -165,6 +196,7 @@ class ChapterTranslator(
             namesFixed = namesFixed,
             glitches = lines.count { hasGlitch(it.it) },
             reviewError = reviewed.error,
+            reviewModel = reviewed.model,
         )
         return Result(lines, updated, stats)
     }
@@ -192,7 +224,8 @@ class ChapterTranslator(
             Prompts.REVIEW_SCHEMA,
             temperature = 0.2,
             attempts = 1,
-            timeoutSeconds = REVIEW_TIMEOUT_SECONDS,
+            // Full Flash models think before answering and can take minutes when busy
+            timeoutSeconds = if ("lite" in model) REVIEW_TIMEOUT_SECONDS else QUALITY_REVIEW_TIMEOUT_SECONDS,
         )
         val fixes = result.json["fixes"]!!.jsonArray.associate {
             it.jsonObject["id"]!!.jsonPrimitive.int to it.jsonObject.str("it").trim()
@@ -314,6 +347,19 @@ class ChapterTranslator(
         /** Scanlation credits such as "TL GRAY", "QC SCARPET", "PR BADWOLF". */
         private val CREDIT = Regex("""^(TL|TS|PR|QC|RD|CL|ED|RAW|RP|TLC)\b[\s:]+\S+.{0,20}$""")
         private const val REVIEW_TIMEOUT_SECONDS = 40L
+        private const val QUALITY_REVIEW_TIMEOUT_SECONDS = 240L
+
+        // 3.1 often answers 503 only after ~25 s, so it is just the fallback for when 3.5 runs out of quota
+        val FAST_REVIEW = listOf("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+
+        /**
+         * Full Flash models fix far more (forms of address, titles, unnatural phrasing) but have about 20 free
+         * requests a day each: they are used in turn, then the fast reviewers take over.
+         */
+        // Fastest first; 2.x Flash models are no longer served to new API keys
+        val QUALITY_REVIEW = listOf("gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.8-flash") + FAST_REVIEW
+
+        private val exhausted = DailyQuota()
 
         /** ML Kit line confidences sit around 0.6-0.8 even for clean lettering. */
         private const val MIN_CONFIDENCE = 0.35f

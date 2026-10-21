@@ -27,6 +27,7 @@ import logcat.asLog
 import logcat.logcat
 import mihon.core.metro.metroGraph
 import mihon.translation.ApiKeyStore
+import mihon.translation.ChapterTranslator
 import mihon.translation.TranslationPipeline
 import mihon.translation.context.SeriesContext
 import mihon.translation.llm.LlmException
@@ -75,9 +76,14 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         ensureChannel(applicationContext)
         setForegroundSafely()
-        val pipeline = TranslationPipeline(applicationContext, { manager.keys.get(ApiKeyStore.GEMINI) }) { _, _ ->
-            manager.recordRequest()
-        }
+        val pipeline = TranslationPipeline(
+            context = applicationContext,
+            apiKey = { manager.keys.get(ApiKeyStore.GEMINI) },
+            onCall = { _, _ -> manager.recordRequest() },
+            reviewModels = {
+                if (preferences.qualityReview.get()) ChapterTranslator.QUALITY_REVIEW else ChapterTranslator.FAST_REVIEW
+            },
+        )
         var done = 0
         while (!isStopped) {
             val pausedUntil = preferences.pausedUntil.get()
@@ -143,13 +149,14 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             val input = copyInput(dir, work)
             val output = File(work, "out.cbz")
             val ctx = storage.readContext(manga) ?: SeriesContext(series = manga.title)
-            val (updated, _) = pipeline.run(
+            val (updated, timings) = pipeline.run(
                 key = "${manga.id}:${chapter.id}",
                 input = input,
                 output = output,
                 ctx = ctx,
                 chapter = chapter.chapterNumber.toFloat(),
             ) { step -> update(manga, label, step) }
+            notifyQualityFallback(timings.translation.reviewModel)
             storage.saveChapter(manga, chapter, output)
             storage.writeContext(manga, updated)
         } finally {
@@ -196,6 +203,15 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             }
         }
         return folder
+    }
+
+    /** Tells once a day that the full Flash reviewers are out of quota and the fast one stands in. */
+    private fun notifyQualityFallback(reviewModel: String?) {
+        if (!preferences.qualityReview.get() || reviewModel == null || reviewModel in QUALITY_ONLY) return
+        val today = java.time.LocalDate.now(TranslationManager.QUOTA_ZONE).toString()
+        if (preferences.qualityFallbackNotifiedDay.get() == today) return
+        preferences.qualityFallbackNotifiedDay.set(today)
+        notify(ID_QUALITY, applicationContext.getString(R.string.translation_quality_fallback))
     }
 
     private fun fail(job: TranslationJob, reason: String?) {
@@ -246,6 +262,8 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         private const val CHANNEL = "translation_channel"
         private const val ID_PROGRESS = -801
         private const val ID_RESULT = -802
+        private const val ID_QUALITY = -803
+        private val QUALITY_ONLY = ChapterTranslator.QUALITY_REVIEW - ChapterTranslator.FAST_REVIEW.toSet()
         private const val MAX_ATTEMPTS = 3
 
         /**

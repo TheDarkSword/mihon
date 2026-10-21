@@ -53,6 +53,26 @@ object SettingsTranslationScreen : SearchableSettings {
         val cache = remember { CheckpointCache(File(context.cacheDir, "translation")) }
         var cacheSize by remember { mutableLongStateOf(cache.sizeBytes()) }
         var confirmDeleteAll by remember { mutableStateOf(false) }
+        var qualityWarning by remember { mutableStateOf(false) }
+
+        if (qualityWarning) {
+            AlertDialog(
+                onDismissRequest = { qualityWarning = false },
+                title = { Text(stringResource(MR.strings.pref_translation_quality_review)) },
+                text = { Text(stringResource(MR.strings.pref_translation_quality_review_warning)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            preferences.qualityReview.set(true)
+                            qualityWarning = false
+                        },
+                    ) { Text(stringResource(MR.strings.translation_enable)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { qualityWarning = false }) { Text(stringResource(MR.strings.action_cancel)) }
+                },
+            )
+        }
 
         if (confirmDeleteAll) {
             AlertDialog(
@@ -143,6 +163,16 @@ object SettingsTranslationScreen : SearchableSettings {
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.pref_translation_behaviour),
                 preferenceItems = listOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = preferences.qualityReview,
+                        title = stringResource(MR.strings.pref_translation_quality_review),
+                        subtitle = stringResource(MR.strings.pref_translation_quality_review_summary),
+                        // Turning it on goes through the warning, which saves the value itself
+                        onValueChanged = { enable ->
+                            if (enable) qualityWarning = true
+                            !enable
+                        },
+                    ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = preferences.deleteOriginal,
                         title = stringResource(MR.strings.pref_translation_delete_original),
