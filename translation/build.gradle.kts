@@ -11,6 +11,10 @@ plugins {
 android {
     namespace = "mihon.translation"
 
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
+
     androidResources {
         noCompress += "onnx"
     }
