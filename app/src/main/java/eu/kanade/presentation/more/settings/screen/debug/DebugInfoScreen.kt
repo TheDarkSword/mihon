@@ -48,6 +48,10 @@ class DebugInfoScreen : Screen() {
                         title = BackupSchemaScreen.TITLE,
                         onClick = { navigator.push(BackupSchemaScreen()) },
                     ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Translation test",
+                        onClick = { navigator.push(mihon.fork.translation.TranslationDebugScreen()) },
+                    ),
                     getAppInfoGroup(),
                     getDeviceInfoGroup(),
                 )
