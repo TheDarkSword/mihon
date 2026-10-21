@@ -1,0 +1,113 @@
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  merge:
+    name: Merge latest Mihon release
+    runs-on: ubuntu-26.04
+    outputs:
+      tag: ${{ steps.upstream.outputs.tag }}
+      branch: ${{ steps.merge.outputs.branch }}
+      up-to-date: ${{ steps.upstream.outputs.up-to-date }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Find latest upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo mihonapp/mihon --json tagName --jq .tagName)
+          git fetch --no-tags https://github.com/mihonapp/mihon.git "refs/tags/$tag:refs/tags/$tag"
+          up_to_date=false
+          if git merge-base --is-ancestor "$tag" HEAD; then
+            up_to_date=true
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "up-to-date=$up_to_date" >> "$GITHUB_OUTPUT"
+
+      - name: Merge
+        id: merge
+        if: steps.upstream.outputs.up-to-date != 'true'
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "${{ vars.GIT_USER_NAME }}"
+          git config user.email "${{ vars.GIT_USER_EMAIL }}"
+          branch="sync/$TAG"
+          git switch -c "$branch"
+          if ! git merge --no-ff --no-edit -m "Merge Mihon $TAG" "$TAG"; then
+            git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicts.txt"
+            exit 1
+          fi
+          git push --force origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Report conflicts
+        if: failure() && steps.merge.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          title="Merge conflict with Mihon $TAG"
+          if [[ -n "$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[].number')" ]]; then
+            exit 0
+          fi
+          {
+            echo "Merging Mihon $TAG into main needs a manual fix. Conflicting files:"
+            echo
+            sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicts.txt"
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > body.md
+          gh issue create --title "$title" --label upstream-sync --body-file body.md
+
+  release:
+    name: Release
+    needs: merge
+    if: needs.merge.outputs.up-to-date != 'true'
+    uses: ./.github/workflows/fork-release.yml
+    with:
+      ref: ${{ needs.merge.outputs.branch }}
+    secrets: inherit
+
+  report-build-failure:
+    name: Report build failure
+    needs: [merge, release]
+    if: failure() && needs.merge.result == 'success'
+    runs-on: ubuntu-26.04
+
+    steps:
+      - name: Open issue
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.merge.outputs.tag }}
+          BRANCH: ${{ needs.merge.outputs.branch }}
+        run: |
+          title="Build failed after merging Mihon $TAG"
+          if [[ -n "$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[].number')" ]]; then
+            exit 0
+          fi
+          gh issue create --title "$title" --label upstream-sync --body \
+            "The merge is on \`$BRANCH\` but checks or the build failed, so main was left alone. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

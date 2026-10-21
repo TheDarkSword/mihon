@@ -1,0 +1,46 @@
+name: Fork build
+description: Checks, tests and builds the signed release APKs of the fork
+
+inputs:
+  build-number:
+    description: Fork build number appended to the upstream version
+    required: true
+  signing-key:
+    description: Base64 encoded keystore
+    required: true
+  store-password:
+    required: true
+  key-alias:
+    required: true
+  key-password:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK
+      uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      with:
+        java-version-file: .github/.java-version
+        distribution: temurin
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+    - name: Decode signing keystore
+      shell: bash
+      run: echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/fork.keystore"
+      env:
+        SIGNING_KEY: ${{ inputs.signing-key }}
+
+    - name: Check and build
+      shell: bash
+      run: >
+        ./gradlew spotlessCheck verifySqlDelightMigration testReleaseUnitTest assembleRelease
+        -Pdist=foss -Penable-updater=false -Pfork.build=${{ inputs.build-number }}
+      env:
+        MIHON_GITHUB_RELEASE: true
+        storeFile: ${{ runner.temp }}/fork.keystore
+        storePassword: ${{ inputs.store-password }}
+        keyAlias: ${{ inputs.key-alias }}
+        keyPassword: ${{ inputs.key-password }}
