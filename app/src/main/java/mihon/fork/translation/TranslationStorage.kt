@@ -34,10 +34,12 @@ class TranslationStorage(
         return base.findFile(ROOT) ?: base.createDirectory(ROOT)
     }
 
-    fun seriesDir(manga: Manga, create: Boolean = false): UniFile? {
+    fun seriesDir(manga: Manga, create: Boolean = false): UniFile? =
+        seriesDir(SeriesLink(manga.source, manga.url, manga.title), create)
+
+    fun seriesDir(link: SeriesLink, create: Boolean = false): UniFile? {
         val root = root() ?: return null
-        val name = DiskUtil.buildValidFilename(manga.title)
-        val link = SeriesLink(manga.source, manga.url, manga.title)
+        val name = DiskUtil.buildValidFilename(link.title)
         root.findFile(name)?.let { dir ->
             val stored = readLink(dir)
             if (stored == null || stored == link) return dir
@@ -48,7 +50,7 @@ class TranslationStorage(
             }
         }
         // Same title from another source gets its own folder
-        val fallback = "$name [${manga.source}]"
+        val fallback = "$name [${link.sourceId}]"
         root.findFile(fallback)?.let { return it }
         if (!create) return null
         val dir = root.createDirectory(if (root.findFile(name) == null) name else fallback) ?: return null
@@ -101,13 +103,18 @@ class TranslationStorage(
         TranslatedChapters.clear()
     }
 
-    fun readContext(manga: Manga): SeriesContext? = seriesDir(manga)?.findFile(CONTEXT_FILE)
+    fun readContext(manga: Manga): SeriesContext? = seriesDir(manga)?.let { readContext(it) }
+
+    fun readContext(dir: UniFile): SeriesContext? = dir.findFile(CONTEXT_FILE)
         ?.let { file ->
             runCatching { TranslationPipeline.json.decodeFromString<SeriesContext>(read(file)) }.getOrNull()
         }
 
     fun writeContext(manga: Manga, ctx: SeriesContext) {
-        val dir = seriesDir(manga, create = true) ?: return
+        writeContext(seriesDir(manga, create = true) ?: return, ctx)
+    }
+
+    fun writeContext(dir: UniFile, ctx: SeriesContext) {
         write(dir, CONTEXT_FILE, TranslationPipeline.json.encodeToString(SeriesContext.serializer(), ctx))
     }
 
@@ -125,8 +132,8 @@ class TranslationStorage(
 
     companion object {
         private const val ROOT = "translations"
-        private const val LINK_FILE = "series.json"
-        private const val CONTEXT_FILE = "context.json"
+        const val LINK_FILE = "series.json"
+        const val CONTEXT_FILE = "context.json"
 
         fun label(number: Double): String = if (number % 1.0 == 0.0) number.toLong().toString() else number.toString()
     }

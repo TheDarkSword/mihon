@@ -1,11 +1,19 @@
 package mihon.fork.translation
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -22,11 +30,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.tachiyomi.ui.manga.MangaViewModel
 import eu.kanade.tachiyomi.util.system.toast
@@ -35,7 +47,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.core.metro.metroGraph
 import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.rounded.Autorenew
+import mihon.icons.materialsymbols.rounded.Book
+import mihon.icons.materialsymbols.rounded.DeleteSweep
+import mihon.icons.materialsymbols.rounded.DoneAll
+import mihon.icons.materialsymbols.rounded.EditNote
+import mihon.icons.materialsymbols.rounded.FormatListNumbered
+import mihon.icons.materialsymbols.rounded.Numbers
+import mihon.icons.materialsymbols.rounded.Palette
+import mihon.icons.materialsymbols.rounded.Share
+import mihon.icons.materialsymbols.rounded.SkipNext
 import mihon.icons.materialsymbols.rounded.Translate
+import mihon.icons.materialsymbols.rounded.TravelExplore
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -72,6 +95,14 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 
     var confirmDeleteAll by remember { mutableStateOf(false) }
     var showRecap by remember { mutableStateOf(false) }
+    val exportLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                val count = withContext(Dispatchers.IO) { TranslationTransfer(context, storage).export(manga, uri) }
+                context.toast(context.getString(tachiyomi.i18n.R.string.translation_exported, count))
+            }
+        }
 
     LaunchedEffect(manga.id) {
         TranslatedChapters.register(manga)
@@ -185,6 +216,10 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                     context.toast(context.getString(tachiyomi.i18n.R.string.translation_rerender_queued, count))
                 }
             },
+            onExport = {
+                showDialog = false
+                exportLauncher.launch("${manga.title}.zip")
+            },
             onContext = {
                 showDialog = false
                 navigator.push(SeriesContextScreen(manga.id))
@@ -207,6 +242,7 @@ private fun TranslateDialog(
     onDeleteAll: () -> Unit,
     onRecap: () -> Unit,
     onContext: () -> Unit,
+    onExport: () -> Unit,
     onRerender: () -> Unit,
     onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -214,43 +250,34 @@ private fun TranslateDialog(
 ) {
     var show by remember { mutableStateOf(showTranslation) }
     var auto by remember { mutableStateOf(autoTranslate) }
+    var rangeOpen by remember { mutableStateOf(false) }
     var from by remember { mutableStateOf("") }
     var to by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(MR.strings.translation)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onDeleteAll) {
-                    Text(
-                        stringResource(MR.strings.translation_delete_all_manga),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                TextButton(onClick = onRecap) {
-                    Text(stringResource(MR.strings.translation_recap))
-                }
-                TextButton(onClick = onContext) {
-                    Text(stringResource(MR.strings.translation_context))
-                }
-                TextButton(onClick = onRerender) {
-                    Text(stringResource(MR.strings.translation_rerender))
-                }
-                TextButton(onClick = { onPick { chapters, _ -> chapters } }) {
-                    Text(stringResource(MR.strings.translate_all))
-                }
-                TextButton(onClick = { onPick { chapters, _ -> chapters.filter { !it.read } } }) {
-                    Text(stringResource(MR.strings.translate_unread))
-                }
-                TextButton(onClick = { onPick(::afterLastTranslated) }) {
-                    Text(stringResource(MR.strings.translate_new))
-                }
-                TextButton(onClick = { onPick(::missingBetweenTranslated) }) {
-                    Text(stringResource(MR.strings.translate_missing))
-                }
+    AdaptiveSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 16.dp)) {
+            SheetSection(stringResource(MR.strings.translation_section_translate))
+            SheetItem(MaterialSymbols.Rounded.DoneAll, MR.strings.translate_all, MR.strings.translate_all_desc) {
+                onPick { chapters, _ -> chapters }
+            }
+            SheetItem(MaterialSymbols.Rounded.Book, MR.strings.translate_unread, MR.strings.translate_unread_desc) {
+                onPick { chapters, _ -> chapters.filter { !it.read } }
+            }
+            SheetItem(MaterialSymbols.Rounded.SkipNext, MR.strings.translate_new, MR.strings.translate_new_desc) {
+                onPick(::afterLastTranslated)
+            }
+            SheetItem(
+                MaterialSymbols.Rounded.FormatListNumbered,
+                MR.strings.translate_missing,
+                MR.strings.translate_missing_desc,
+            ) { onPick(::missingBetweenTranslated) }
+            SheetItem(MaterialSymbols.Rounded.Numbers, MR.strings.translate_range, MR.strings.translate_range_desc) {
+                rangeOpen = !rangeOpen
+            }
+            if (rangeOpen) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp),
                 ) {
                     OutlinedTextField(
                         value = from,
@@ -268,42 +295,159 @@ private fun TranslateDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
-                }
-                TextButton(
-                    enabled = from.toDoubleOrNull() != null && to.toDoubleOrNull() != null,
-                    onClick = {
-                        val range = from.toDouble()..to.toDouble()
-                        onPick { chapters, _ -> chapters.filter { it.chapterNumber in range } }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(MR.strings.translate_range))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(MR.strings.translation_auto), modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = auto,
-                        onCheckedChange = {
-                            auto = it
-                            onAutoTranslate(it)
+                    TextButton(
+                        enabled = from.toDoubleOrNull() != null && to.toDoubleOrNull() != null,
+                        onClick = {
+                            val range = from.toDouble()..to.toDouble()
+                            onPick { chapters, _ -> chapters.filter { it.chapterNumber in range } }
                         },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(MR.strings.translation_show), modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = show,
-                        onCheckedChange = {
-                            show = it
-                            onShowTranslation(it)
-                        },
-                    )
+                    ) { Text(stringResource(MR.strings.action_translate)) }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(MR.strings.action_close)) } },
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SheetSection(stringResource(MR.strings.translation_section_series))
+            SheetItem(
+                MaterialSymbols.Rounded.EditNote,
+                MR.strings.translation_context,
+                MR.strings.translation_context_desc,
+
+                onClick = onContext,
+            )
+            SheetItem(
+                MaterialSymbols.Rounded.TravelExplore,
+                MR.strings.translation_recap,
+                MR.strings.translation_recap_summary,
+
+                onClick = onRecap,
+            )
+            SheetItem(
+                MaterialSymbols.Rounded.Palette,
+                MR.strings.translation_rerender,
+                MR.strings.translation_rerender_desc,
+
+                onClick = onRerender,
+            )
+            SheetItem(
+                MaterialSymbols.Rounded.Share,
+                MR.strings.translation_export,
+                MR.strings.translation_export_desc,
+
+                onClick = onExport,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SheetSection(stringResource(MR.strings.translation_section_options))
+            SheetSwitch(
+                MaterialSymbols.Rounded.Translate,
+                MR.strings.translation_show,
+                MR.strings.translation_show_desc,
+                show,
+            ) {
+                show = it
+                onShowTranslation(it)
+            }
+            SheetSwitch(
+                MaterialSymbols.Rounded.Autorenew,
+                MR.strings.translation_auto,
+                MR.strings.translation_auto_desc,
+                auto,
+            ) {
+                auto = it
+                onAutoTranslate(it)
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SheetItem(
+                icon = MaterialSymbols.Rounded.DeleteSweep,
+                title = MR.strings.translation_delete_all_manga,
+                description = MR.strings.translation_delete_all_desc,
+                tint = MaterialTheme.colorScheme.error,
+                onClick = onDeleteAll,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetSection(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
+}
+
+@Composable
+private fun SheetItem(
+    icon: ImageVector,
+    title: StringResource,
+    description: StringResource,
+    tint: Color = Color.Unspecified,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (tint ==
+                Color.Unspecified
+            ) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                tint
+            },
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(
+                stringResource(title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (tint ==
+                    Color.Unspecified
+                ) {
+                    Color.Unspecified
+                } else {
+                    tint
+                },
+            )
+            Text(
+                stringResource(description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetSwitch(
+    icon: ImageVector,
+    title: StringResource,
+    description: StringResource,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable {
+            onChange(!checked)
+        }.padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
 }
 
 private fun translatedNumbers(names: Set<String>) = names.mapNotNull { it.removeSuffix(".cbz").toDoubleOrNull() }
