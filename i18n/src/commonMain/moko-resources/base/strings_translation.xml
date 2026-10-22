@@ -94,4 +94,21 @@
     <string name="translation_story_recent">Recent chapters</string>
     <string name="translation_add_term">Add term</string>
     <string name="translation_search">Search</string>
+    <string name="pref_translation_style">Text style</string>
+    <string name="pref_translation_text_uppercase">Uppercase text</string>
+    <string name="pref_translation_text_size">Text size</string>
+    <string name="pref_translation_text_smaller">Smaller</string>
+    <string name="pref_translation_text_normal">Normal</string>
+    <string name="pref_translation_text_larger">Larger</string>
+    <string name="pref_translation_text_much_larger">Much larger</string>
+    <string name="pref_translation_text_font">Font</string>
+    <string name="pref_translation_text_weight">Weight</string>
+    <string name="pref_translation_text_light">Light</string>
+    <string name="pref_translation_text_bold">Bold</string>
+    <string name="pref_translation_style_note">Applies to new chapters. For the ones already translated use Re-render in the series Translate… menu: no quota is used.</string>
+    <string name="translation_rerender">Re-render translated chapters</string>
+    <string name="translation_rerender_queued">%d chapters queued for re-rendering</string>
+    <string name="translation_rerender_progress">%1$s · re-rendering chapter %2$s</string>
+    <string name="translation_step_download">Downloading the chapter</string>
+    <string name="translation_step_typesetting">Typesetting</string>
 </resources>

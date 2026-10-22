@@ -177,6 +177,14 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                 showDialog = false
                 showRecap = true
             },
+            onRerender = {
+                showDialog = false
+                val chapters = state.chapters.map { it.chapter }
+                scope.launch {
+                    val count = withContext(Dispatchers.IO) { manager.enqueueRender(manga, chapters) }
+                    context.toast(context.getString(tachiyomi.i18n.R.string.translation_rerender_queued, count))
+                }
+            },
             onContext = {
                 showDialog = false
                 navigator.push(SeriesContextScreen(manga.id))
@@ -199,6 +207,7 @@ private fun TranslateDialog(
     onDeleteAll: () -> Unit,
     onRecap: () -> Unit,
     onContext: () -> Unit,
+    onRerender: () -> Unit,
     onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onPick: ((List<Chapter>, Set<String>) -> List<Chapter>) -> Unit,
@@ -223,6 +232,9 @@ private fun TranslateDialog(
                 }
                 TextButton(onClick = onContext) {
                     Text(stringResource(MR.strings.translation_context))
+                }
+                TextButton(onClick = onRerender) {
+                    Text(stringResource(MR.strings.translation_rerender))
                 }
                 TextButton(onClick = { onPick { chapters, _ -> chapters } }) {
                     Text(stringResource(MR.strings.translate_all))

@@ -93,4 +93,21 @@
     <string name="translation_story_recent">Ultimi capitoli</string>
     <string name="translation_add_term">Aggiungi voce</string>
     <string name="translation_search">Cerca</string>
+    <string name="pref_translation_style">Stile del testo</string>
+    <string name="pref_translation_text_uppercase">Testo in maiuscolo</string>
+    <string name="pref_translation_text_size">Dimensione del testo</string>
+    <string name="pref_translation_text_smaller">Più piccolo</string>
+    <string name="pref_translation_text_normal">Normale</string>
+    <string name="pref_translation_text_larger">Più grande</string>
+    <string name="pref_translation_text_much_larger">Molto più grande</string>
+    <string name="pref_translation_text_font">Font</string>
+    <string name="pref_translation_text_weight">Spessore</string>
+    <string name="pref_translation_text_light">Leggero</string>
+    <string name="pref_translation_text_bold">Marcato</string>
+    <string name="pref_translation_style_note">Vale per i nuovi capitoli. Per quelli già tradotti usa Reimpagina in Traduci… nel menu della serie: non consuma quota.</string>
+    <string name="translation_rerender">Reimpagina i capitoli tradotti</string>
+    <string name="translation_rerender_queued">%d capitoli in coda per la reimpaginazione</string>
+    <string name="translation_rerender_progress">%1$s · reimpaginazione capitolo %2$s</string>
+    <string name="translation_step_download">Scaricamento del capitolo</string>
+    <string name="translation_step_typesetting">Impaginazione</string>
 </resources>

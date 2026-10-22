@@ -27,6 +27,8 @@ data class TranslationJob(
     val title: String,
     val attempts: Int = 0,
     val recap: RecapRequest? = null,
+    /** Letter the saved translation again with the current style, without new requests. */
+    val render: Boolean = false,
 )
 
 /** Build the series context from the Italian scanlation the reader already read, up to chapter [until]. */
@@ -79,6 +81,19 @@ class TranslationManager(
     /** Resumes a queue left behind, e.g. after the app was killed. Blocking. */
     fun resumeIfNeeded() {
         if (_queue.value.isNotEmpty() && hasKey()) TranslationWorker.start(context)
+    }
+
+    /** Queues the already translated chapters for re-rendering with the current text style. */
+    fun enqueueRender(manga: Manga, chapters: List<Chapter>): Int {
+        val queued = _queue.value.map { it.chapterId }.toSet()
+        val jobs = chapters
+            .filter { it.id !in queued && storage.isTranslated(manga, it) }
+            .map { TranslationJob(manga.id, it.id, it.chapterNumber, manga.title, render = true) }
+        if (jobs.isEmpty()) return 0
+        _queue.update { inReadingOrder(it + jobs) }
+        save()
+        TranslationWorker.start(context)
+        return jobs.size
     }
 
     /** Queues a recap ahead of the series' chapters, replacing a recap still waiting for the same series. */

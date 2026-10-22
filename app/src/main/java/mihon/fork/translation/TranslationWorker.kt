@@ -27,6 +27,7 @@ import logcat.asLog
 import logcat.logcat
 import mihon.core.metro.metroGraph
 import mihon.translation.ApiKeyStore
+import mihon.translation.ChapterTranslation
 import mihon.translation.ChapterTranslator
 import mihon.translation.TranslationPipeline
 import mihon.translation.context.SeriesContext
@@ -41,6 +42,7 @@ import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.R
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -107,9 +109,13 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             }
             val job = manager.beginAttempt(next)
             try {
-                if (job.recap != null) recap(job, job.recap) else translate(job, pipeline)
+                when {
+                    job.recap != null -> recap(job, job.recap)
+                    job.render -> rerender(job, pipeline)
+                    else -> translate(job, pipeline)
+                }
                 manager.remove(job)
-                if (job.recap == null) done++
+                if (job.recap == null && !job.render) done++
             } catch (e: CancellationException) {
                 throw e
             } catch (e: LlmException) {
@@ -160,7 +166,7 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         val manga = getManga.await(job.mangaId) ?: error("Manga not found")
         val chapter = getChapter.await(job.chapterId) ?: error("Chapter not found")
         val label = TranslationStorage.label(chapter.chapterNumber)
-        update(manga, label, null)
+        update(manga, label, applicationContext.getString(R.string.translation_step_download))
 
         val dir = downloaded(manga, chapter)
         val work = File(applicationContext.cacheDir, "translation-work/${chapter.id}").apply {
@@ -177,10 +183,45 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                 output = output,
                 ctx = ctx,
                 chapter = chapter.chapterNumber.toFloat(),
+                style = preferences.textStyle(),
             ) { step -> update(manga, label, step) }
             notifyQualityFallback(timings.translation.reviewModel)
             storage.saveChapter(manga, chapter, output)
             storage.writeContext(manga, keepUserEdits(updated, ctx, storage.readContext(manga)))
+        } finally {
+            work.deleteRecursively()
+        }
+        if (preferences.deleteOriginal.get()) {
+            downloadManager.deleteChapters(listOf(chapter), manga, sourceManager.getOrStub(manga.source))
+        }
+    }
+
+    private suspend fun rerender(job: TranslationJob, pipeline: TranslationPipeline) {
+        val manga = getManga.await(job.mangaId) ?: error("Manga not found")
+        val chapter = getChapter.await(job.chapterId) ?: error("Chapter not found")
+        val label = TranslationStorage.label(chapter.chapterNumber)
+        val title = applicationContext.getString(R.string.translation_rerender_progress, manga.title, label)
+        updateTitle(title, applicationContext.getString(R.string.translation_step_download))
+        val saved = storage.chapterFile(manga, chapter) ?: error("Translation not found")
+        val data = saved.openInputStream().use { stream ->
+            ZipInputStream(stream.buffered()).use { zip ->
+                generateSequence { zip.nextEntry }.firstOrNull { it.name == TranslationPipeline.JSON_ENTRY }
+                    ?.let {
+                        TranslationPipeline.json.decodeFromString<ChapterTranslation>(zip.readBytes().decodeToString())
+                    }
+            }
+        } ?: error("No translation data in the chapter")
+        val dir = downloaded(manga, chapter)
+        val work = File(applicationContext.cacheDir, "translation-work/${chapter.id}").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val output = File(work, "out.cbz")
+            val input = copyInput(dir, work)
+            updateTitle(title, applicationContext.getString(R.string.translation_step_typesetting))
+            pipeline.rerender(input, data, output, preferences.textStyle())
+            storage.saveChapter(manga, chapter, output)
         } finally {
             work.deleteRecursively()
         }

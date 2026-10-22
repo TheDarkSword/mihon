@@ -17,6 +17,7 @@ import mihon.translation.model.Detection
 import mihon.translation.model.TextBlock
 import mihon.translation.model.TranslatedLine
 import mihon.translation.ocr.TextReader
+import mihon.translation.render.TextStyle
 import mihon.translation.render.Typesetter
 import java.io.File
 import java.util.zip.CRC32
@@ -65,6 +66,7 @@ class TranslationPipeline(
         ctx: SeriesContext,
         chapter: Float,
         keepCheckpoints: Boolean = false,
+        style: TextStyle = TextStyle(),
         progress: (String) -> Unit,
     ): Pair<SeriesContext, PipelineTimings> = withContext(Dispatchers.Default) {
         val start = System.currentTimeMillis()
@@ -130,7 +132,7 @@ class TranslationPipeline(
             output.parentFile?.mkdirs()
             val tmp = File(output.path + ".tmp")
             ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
-                Typesetter(context).render(strip, placements) { name, bytes -> zip.putStored(name, bytes) }
+                Typesetter(context, style).render(strip, placements) { name, bytes -> zip.putStored(name, bytes) }
                 zip.putStored(JSON_ENTRY, json.encodeToString(data).toByteArray())
             }
             tmp.renameTo(output)
@@ -153,6 +155,25 @@ class TranslationPipeline(
             result.context to timings
         }
     }
+
+    /**
+     * Letters a chapter again from the translation saved in its CBZ, on fresh original pages: no detection,
+     * OCR or model request.
+     */
+    suspend fun rerender(input: File, data: ChapterTranslation, output: File, style: TextStyle) =
+        withContext(Dispatchers.Default) {
+            openStrip(input).use { strip ->
+                val byId = data.lines.associateBy { it.id }
+                val placements = data.blocks.mapNotNull { b -> byId[b.id]?.let { Typesetter.Placement(b, it.it) } }
+                output.parentFile?.mkdirs()
+                val tmp = File(output.path + ".tmp")
+                ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
+                    Typesetter(context, style).render(strip, placements) { name, bytes -> zip.putStored(name, bytes) }
+                    zip.putStored(JSON_ENTRY, json.encodeToString(data).toByteArray())
+                }
+                tmp.renameTo(output)
+            }
+        }
 
     /** Detection only, with the given settings, to compare speed on the device without using any quota. */
     suspend fun benchmarkDetector(input: File, threads: Int, xnnpack: Boolean, overlap: Float): String =

@@ -27,6 +27,7 @@ import mihon.core.metro.metroGraph
 import mihon.translation.ApiKeyStore
 import mihon.translation.CheckpointCache
 import mihon.translation.llm.GeminiClient
+import mihon.translation.render.TextStyle
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -178,6 +179,45 @@ object SettingsTranslationScreen : SearchableSettings {
                         title = stringResource(MR.strings.pref_translation_delete_original),
                         subtitle = stringResource(MR.strings.pref_translation_delete_original_summary),
                     ),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.pref_translation_style),
+                preferenceItems = listOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = preferences.textUppercase,
+                        title = stringResource(MR.strings.pref_translation_text_uppercase),
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = preferences.textScale,
+                        entries = mapOf(
+                            85 to stringResource(MR.strings.pref_translation_text_smaller),
+                            100 to stringResource(MR.strings.pref_translation_text_normal),
+                            115 to stringResource(MR.strings.pref_translation_text_larger),
+                            130 to stringResource(MR.strings.pref_translation_text_much_larger),
+                        ),
+                        title = stringResource(MR.strings.pref_translation_text_size),
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = preferences.textFont,
+                        entries = mapOf(
+                            TextStyle.COMIC_NEUE to "Comic Neue",
+                            TextStyle.BANGERS to "Bangers",
+                            TextStyle.PATRICK_HAND to "Patrick Hand",
+                            TextStyle.KALAM to "Kalam",
+                        ),
+                        title = stringResource(MR.strings.pref_translation_text_font),
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = preferences.textWeight,
+                        entries = mapOf(
+                            50 to stringResource(MR.strings.pref_translation_text_light),
+                            100 to stringResource(MR.strings.pref_translation_text_normal),
+                            180 to stringResource(MR.strings.pref_translation_text_bold),
+                        ),
+                        title = stringResource(MR.strings.pref_translation_text_weight),
+                    ),
+                    Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_translation_style_note)),
                 ),
             ),
             Preference.PreferenceGroup(

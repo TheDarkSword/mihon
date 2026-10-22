@@ -31,11 +31,11 @@ import kotlin.math.min
  * Draws Italian text over the original pages: the English text is covered with the sampled background colour
  * and the translation is fitted inside the bubble. Pages are processed in bands to bound memory.
  */
-class Typesetter(private val context: Context) {
+class Typesetter(private val context: Context, private val style: TextStyle = TextStyle()) {
 
     data class Placement(val block: TextBlock, val text: String)
 
-    private val typeface = Typeface.createFromAsset(context.assets, "translation/ComicNeue-Bold.ttf")
+    private val typeface = Typeface.createFromAsset(context.assets, "translation/" + TextStyle.fontFile(style.font))
     private val italian = Locale.ITALIAN
 
     /** Returns the encoded output images, one or more per source page. */
@@ -112,7 +112,7 @@ class Typesetter(private val context: Context) {
 
     private fun draw(canvas: Canvas, placement: Placement, patch: Eraser.Patch, sharedBubble: Boolean) {
         val block = placement.block
-        val text = placement.text.uppercase(italian)
+        val text = if (style.uppercase) placement.text.uppercase(italian) else placement.text
         val bubble = block.bubble
         val target = when {
             // A bubble holding several lines gives each one only its own area
@@ -169,7 +169,7 @@ class Typesetter(private val context: Context) {
         }
         fun layout(size: Float): StaticLayout {
             paint.textSize = size
-            paint.strokeWidth = size * WEIGHT
+            paint.strokeWidth = size * WEIGHT * style.weight
             return StaticLayout.Builder.obtain(text, 0, text.length, TextPaint(paint), width)
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setHyphenationFrequency(hyphenation)
@@ -183,7 +183,7 @@ class Typesetter(private val context: Context) {
             (0 until l.lineCount).none { line -> splitsWord(l, line, hyphenation) }
 
         var lo = MIN_SIZE
-        var hi = max(MIN_SIZE, min(MAX_SIZE, target.height * 0.5f))
+        var hi = max(MIN_SIZE, min(MAX_SIZE * style.scale, target.height * 0.5f * max(style.scale, 1f)))
         var best = layout(lo)
         repeat(12) {
             val mid = (lo + hi) / 2
@@ -195,7 +195,8 @@ class Typesetter(private val context: Context) {
                 hi = mid
             }
         }
-        return layout(best.paint.textSize)
+        // A smaller text size shrinks the best fit, a larger one only lifts the cap above
+        return layout(max(MIN_SIZE, best.paint.textSize * min(style.scale, 1f)))
     }
 
     /** Without hyphenation a word too long for the line is broken anyway: treat that as not fitting. */
