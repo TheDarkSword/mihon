@@ -59,6 +59,7 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
     var fromLibrary by remember { mutableStateOf(true) }
     var library by remember { mutableStateOf<List<Pair<Manga, HttpSource>>>(emptyList()) }
     var localMangaId by remember { mutableStateOf<Long?>(null) }
+    var filter by remember { mutableStateOf("") }
     val graph = remember { context.metroGraph<TranslationGraph>() }
 
     LaunchedEffect(Unit) {
@@ -68,7 +69,7 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
         val byId = italian.associateBy { it.id }
         library = withContext(Dispatchers.IO) { graph.getFavorites.await() }
             .mapNotNull { m -> byId[m.source]?.let { m to it } }
-            .sortedBy { it.first.title }
+            .sortedBy { it.first.title.lowercase() }
         if (library.isEmpty()) fromLibrary = false
     }
 
@@ -100,25 +101,36 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
                     available.isEmpty() -> Text(stringResource(MR.strings.translation_recap_no_sources))
                     picked == null && fromLibrary -> {
                         ModeChips(fromLibrary = true, onLibrary = {}, onSearch = { fromLibrary = false })
-                        if (library.isEmpty()) Text(stringResource(MR.strings.translation_recap_library_empty))
-                        library.forEach { (item, itemSource) ->
-                            TextButton(
-                                onClick = {
-                                    source = itemSource
-                                    picked = item.toSManga()
-                                    localMangaId = item.id
-                                    load {
-                                        numbers = graph.getChaptersByMangaId.await(item.id)
-                                            .map { it.chapterNumber.toFloat() }
-                                            .filter { it >= 0 }
-                                            .distinct()
-                                            .sorted()
-                                        until = numbers.lastOrNull()?.let { RecapRunner.label(it) }.orEmpty()
-                                    }
-                                },
+                        if (library.isEmpty()) {
+                            Text(stringResource(MR.strings.translation_recap_library_empty))
+                        } else {
+                            OutlinedTextField(
+                                value = filter,
+                                onValueChange = { filter = it },
+                                placeholder = { Text(stringResource(MR.strings.translation_search)) },
+                                singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
-                            ) { Text("${item.title} · ${itemSource.name}") }
+                            )
                         }
+                        library.filter { filter.isBlank() || it.first.title.contains(filter, ignoreCase = true) }
+                            .forEach { (item, itemSource) ->
+                                TextButton(
+                                    onClick = {
+                                        source = itemSource
+                                        picked = item.toSManga()
+                                        localMangaId = item.id
+                                        load {
+                                            numbers = graph.getChaptersByMangaId.await(item.id)
+                                                .map { it.chapterNumber.toFloat() }
+                                                .filter { it >= 0 }
+                                                .distinct()
+                                                .sorted()
+                                            until = numbers.lastOrNull()?.let { RecapRunner.label(it) }.orEmpty()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("${item.title} · ${itemSource.name}") }
+                            }
                     }
                     picked == null -> {
                         if (library.isNotEmpty()) {
@@ -144,7 +156,10 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
                                 enabled = !loading && source != null && query.isNotBlank(),
                                 onClick = {
                                     val s = source ?: return@TextButton
-                                    load { results = s.getSearchManga(1, query, s.getFilterList()).mangas }
+                                    load {
+                                        results = s.getSearchManga(1, query, s.getFilterList()).mangas
+                                            .sortedBy { it.title.lowercase() }
+                                    }
                                 },
                             ) { Text(stringResource(MR.strings.translation_recap_search)) }
                         }
