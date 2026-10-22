@@ -22,6 +22,12 @@ object Prompts {
         - Keep the intensity of the English: no vulgarity stronger than the source ("damned" -> "maledetto", not
           swear words). Keep deliberate repetitions ("DAMN IT! DAMN IT!" -> "Dannazione! Dannazione!").
         - Every line must get its own translation in the same position: never move text between ids.
+        - Translate idioms and set phrases by meaning, never word by word ("Know your place!" -> "Stai al tuo
+          posto!", "buy time" -> "guadagnare tempo", "playtime is over" -> "il gioco è finito").
+        - Titles follow the person, not the English wording: an emperor or king is "Maestà" even when the English
+          says "Highness".
+        - When the gender of a speaker or listener is unclear and the character sheet does not say it, prefer a
+          wording that does not mark gender instead of guessing.
         - Lines are OCR output: fix obvious OCR mistakes using context.
         - Casing: the source is often ALL CAPS. ALWAYS write Italian in normal sentence case (capital letter only at the
           start of sentences and for proper nouns), never all caps, except single shouted words or SFX-like interjections.
@@ -53,6 +59,7 @@ object Prompts {
         - spelling, grammar, agreement (gender/number), wrong verb person or tense
         - garbage tokens: words in other scripts or random English/code fragments inside Italian lines
         - mistranslations (meaning differs from the English), including idioms translated literally
+          ("Know your place!" is "Stai al tuo posto!", not "Unisciti al tuo posto!")
         - wrong form of address: tu/voi/lei must be consistent per speaker->listener pair across the chapter and with
           the character sheet; nobles normally use voi towards superiors; Emperor/King are "Maestà", princes "Altezza"
         - glossary violations, names must follow the glossary; never change the number or gender of a named character
