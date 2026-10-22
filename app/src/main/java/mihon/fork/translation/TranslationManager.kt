@@ -26,6 +26,19 @@ data class TranslationJob(
     val number: Double,
     val title: String,
     val attempts: Int = 0,
+    val recap: RecapRequest? = null,
+)
+
+/** Build the series context from the Italian scanlation the reader already read, up to chapter [until]. */
+@Serializable
+data class RecapRequest(
+    val sourceId: Long,
+    val mangaUrl: String,
+    val title: String,
+    val until: Double,
+    val precision: Int,
+    /** The Italian series as saved in the library, so downloaded chapters can be read without the network. */
+    val localMangaId: Long? = null,
 )
 
 /** Persistent translation queue and the lookups the reader and the manga screen need. */
@@ -66,6 +79,14 @@ class TranslationManager(
     /** Resumes a queue left behind, e.g. after the app was killed. Blocking. */
     fun resumeIfNeeded() {
         if (_queue.value.isNotEmpty() && hasKey()) TranslationWorker.start(context)
+    }
+
+    /** Queues a recap ahead of the series' chapters, replacing a recap still waiting for the same series. */
+    fun enqueueRecap(manga: Manga, request: RecapRequest) {
+        val job = TranslationJob(manga.id, recapId(manga), RECAP_NUMBER, manga.title, recap = request)
+        _queue.update { queue -> inReadingOrder(queue.filterNot { it.chapterId == job.chapterId } + job) }
+        save()
+        TranslationWorker.start(context)
     }
 
     fun next(): TranslationJob? = _queue.value.firstOrNull()
@@ -164,6 +185,11 @@ class TranslationManager(
     }
 
     companion object {
+        /** Recaps sort before every chapter of their series. */
+        const val RECAP_NUMBER = -1.0
+
+        fun recapId(manga: Manga) = -manga.id
+
         val QUOTA_ZONE: ZoneId = ZoneId.of("America/Los_Angeles")
     }
 }

@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.tachiyomi.ui.manga.MangaViewModel
 import eu.kanade.tachiyomi.util.system.toast
@@ -60,6 +62,7 @@ object MangaToolbarExtras {
 @Composable
 fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.State.Success) {
     val context = LocalContext.current
+    val navigator = LocalNavigator.currentOrThrow
     val graph = remember { context.metroGraph<TranslationGraph>() }
     val manager = graph.translationManager
     val storage = graph.translationStorage
@@ -68,6 +71,7 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     var showDialog by remember { mutableStateOf(false) }
 
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    var showRecap by remember { mutableStateOf(false) }
 
     LaunchedEffect(manga.id) {
         TranslatedChapters.register(manga)
@@ -124,6 +128,24 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
         onDispose { MangaToolbarExtras.remove(manga.title) }
     }
 
+    if (showRecap) {
+        RecapDialog(
+            manga = manga,
+            onDismiss = { showRecap = false },
+            onConfirm = { request ->
+                showRecap = false
+                if (!manager.hasKey()) {
+                    context.toast(MR.strings.translation_missing_key)
+                } else {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { manager.enqueueRecap(manga, request) }
+                        context.toast(MR.strings.translation_recap_queued)
+                    }
+                }
+            },
+        )
+    }
+
     if (confirmDeleteAll) {
         AlertDialog(
             onDismissRequest = { confirmDeleteAll = false },
@@ -151,6 +173,14 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                 showDialog = false
                 confirmDeleteAll = true
             },
+            onRecap = {
+                showDialog = false
+                showRecap = true
+            },
+            onContext = {
+                showDialog = false
+                navigator.push(SeriesContextScreen(manga.id))
+            },
             onAutoTranslate = { AutoTranslation.setEnabled(context, manga, it) },
             onDismiss = { showDialog = false },
             onPick = { pick ->
@@ -167,6 +197,8 @@ private fun TranslateDialog(
     onShowTranslation: (Boolean) -> Unit,
     autoTranslate: Boolean,
     onDeleteAll: () -> Unit,
+    onRecap: () -> Unit,
+    onContext: () -> Unit,
     onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onPick: ((List<Chapter>, Set<String>) -> List<Chapter>) -> Unit,
@@ -185,6 +217,12 @@ private fun TranslateDialog(
                         stringResource(MR.strings.translation_delete_all_manga),
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+                TextButton(onClick = onRecap) {
+                    Text(stringResource(MR.strings.translation_recap))
+                }
+                TextButton(onClick = onContext) {
+                    Text(stringResource(MR.strings.translation_context))
                 }
                 TextButton(onClick = { onPick { chapters, _ -> chapters } }) {
                     Text(stringResource(MR.strings.translate_all))

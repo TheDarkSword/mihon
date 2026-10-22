@@ -30,8 +30,10 @@ import mihon.translation.ApiKeyStore
 import mihon.translation.ChapterTranslator
 import mihon.translation.TranslationPipeline
 import mihon.translation.context.SeriesContext
+import mihon.translation.llm.GeminiClient
 import mihon.translation.llm.LlmException
 import tachiyomi.domain.chapter.interactor.GetChapter
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
@@ -60,6 +62,8 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
     @Inject lateinit var downloadManager: DownloadManager
 
     @Inject lateinit var downloadProvider: DownloadProvider
+
+    @Inject lateinit var getChaptersByMangaId: GetChaptersByMangaId
 
     private val notifications = NotificationManagerCompat.from(context)
 
@@ -103,9 +107,9 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             }
             val job = manager.beginAttempt(next)
             try {
-                translate(job, pipeline)
+                if (job.recap != null) recap(job, job.recap) else translate(job, pipeline)
                 manager.remove(job)
-                done++
+                if (job.recap == null) done++
             } catch (e: CancellationException) {
                 throw e
             } catch (e: LlmException) {
@@ -134,6 +138,24 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         return Result.success()
     }
 
+    private suspend fun recap(job: TranslationJob, request: RecapRequest) {
+        val manga = getManga.await(job.mangaId) ?: error("Manga not found")
+        val client = GeminiClient({ manager.keys.get(ApiKeyStore.GEMINI) }) { _, _ -> manager.recordRequest() }
+        RecapRunner(
+            applicationContext,
+            sourceManager,
+            getManga,
+            getChaptersByMangaId,
+            downloadProvider,
+            storage,
+            client,
+        )
+            .run(manga, request) { step ->
+                updateTitle(applicationContext.getString(R.string.translation_recap_progress, manga.title), step)
+            }
+        notify(ID_RESULT, applicationContext.getString(R.string.translation_recap_done, manga.title))
+    }
+
     private suspend fun translate(job: TranslationJob, pipeline: TranslationPipeline) {
         val manga = getManga.await(job.mangaId) ?: error("Manga not found")
         val chapter = getChapter.await(job.chapterId) ?: error("Chapter not found")
@@ -158,7 +180,7 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
             ) { step -> update(manga, label, step) }
             notifyQualityFallback(timings.translation.reviewModel)
             storage.saveChapter(manga, chapter, output)
-            storage.writeContext(manga, updated)
+            storage.writeContext(manga, keepUserEdits(updated, ctx, storage.readContext(manga)))
         } finally {
             work.deleteRecursively()
         }
@@ -205,6 +227,23 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         return folder
     }
 
+    /**
+     * The context may have been edited while the chapter was being translated: locked entries and a changed
+     * story summary from the latest file win over the copy the chapter started from.
+     */
+    private fun keepUserEdits(updated: SeriesContext, start: SeriesContext, latest: SeriesContext?): SeriesContext {
+        if (latest == null || latest.version == start.version) return updated
+        val lockedTerms = latest.glossary.filter { it.locked }.associateBy { it.en.lowercase() }
+        val lockedCharacters = latest.characters.filter { it.locked }.associateBy { it.name.lowercase() }
+        return updated.copy(
+            glossary = updated.glossary.filterNot { it.en.lowercase() in lockedTerms } + lockedTerms.values,
+            characters =
+            updated.characters.filterNot { it.name.lowercase() in lockedCharacters } + lockedCharacters.values,
+            arcSummary = if (latest.arcSummary != start.arcSummary) latest.arcSummary else updated.arcSummary,
+            version = maxOf(updated.version, latest.version) + 1,
+        )
+    }
+
     /** Tells once a day that the full Flash reviewers are out of quota and the fast one stands in. */
     private fun notifyQualityFallback(reviewModel: String?) {
         if (!preferences.qualityReview.get() || reviewModel == null || reviewModel in QUALITY_ONLY) return
@@ -222,9 +261,15 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         )
     }
 
-    /** Updates the foreground notification in place, so it can be called from the pipeline's progress callback. */
     private fun update(manga: Manga, chapter: String, step: String?) {
-        val title = applicationContext.getString(R.string.translation_notification_progress, manga.title, chapter)
+        updateTitle(
+            applicationContext.getString(R.string.translation_notification_progress, manga.title, chapter),
+            step,
+        )
+    }
+
+    /** Updates the foreground notification in place, so it can be called from progress callbacks. */
+    private fun updateTitle(title: String, step: String?) {
         val left = manager.queue.value.size
         val text = listOfNotNull(step, applicationContext.getString(R.string.translation_notification_queue, left))
         if (notifications.areNotificationsEnabled()) {
