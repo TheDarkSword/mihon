@@ -50,6 +50,7 @@ class DebugInfoScreen : Screen() {
                     ),
                     Preference.PreferenceItem.TextPreference(
                         title = "Translation test",
+                        visible = eu.kanade.tachiyomi.BuildConfig.DEBUG,
                         onClick = { navigator.push(mihon.fork.translation.TranslationDebugScreen()) },
                     ),
                     getAppInfoGroup(),
