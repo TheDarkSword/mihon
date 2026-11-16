@@ -74,11 +74,12 @@ class PcTranslator(
     }
 
     private suspend fun relocate(): Boolean {
-        val found = PcDiscovery.discover(context, RELOCATE_MILLIS)
+        val found = LanDiscovery.discover(context, PcClient.SERVICE_TYPE, RELOCATE_MILLIS)
         val target =
             found.firstOrNull { it.name == preferences.pcService.get() } ?: found.singleOrNull() ?: return false
-        if (target.address == preferences.pcAddress.get()) return false
-        preferences.pcAddress.set(target.address)
+        val address = PcClient.address(target.host, target.port)
+        if (address == preferences.pcAddress.get()) return false
+        preferences.pcAddress.set(address)
         return true
     }
 

@@ -158,7 +158,7 @@ private fun PcPairDialog(onDismiss: () -> Unit, onPaired: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pc = remember { context.metroGraph<TranslationGraph>().pcTranslator }
-    var found by remember { mutableStateOf<List<PcDiscovery.Found>?>(null) }
+    var found by remember { mutableStateOf<List<LanDiscovery.Found>?>(null) }
     var search by remember { mutableIntStateOf(0) }
     var address by remember { mutableStateOf("") }
     var service by remember { mutableStateOf<String?>(null) }
@@ -169,10 +169,10 @@ private fun PcPairDialog(onDismiss: () -> Unit, onPaired: () -> Unit) {
 
     LaunchedEffect(search) {
         found = null
-        val list = PcDiscovery.discover(context)
+        val list = LanDiscovery.discover(context, PcClient.SERVICE_TYPE)
         found = list
         if (list.size == 1 && address.isBlank()) {
-            address = list[0].address.removePrefix("http://")
+            address = list[0].address
             service = list[0].name
         }
     }
@@ -210,7 +210,7 @@ private fun PcPairDialog(onDismiss: () -> Unit, onPaired: () -> Unit) {
                         else -> {
                             if (list.isEmpty()) Text(stringResource(MR.strings.translation_pc_none_found))
                             list.forEach { item ->
-                                val host = item.address.removePrefix("http://")
+                                val host = item.address
                                 FilterChip(
                                     selected = address == host,
                                     onClick = {

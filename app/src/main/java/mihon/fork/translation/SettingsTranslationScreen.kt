@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.tachiyomi.util.system.openInBrowser
@@ -54,6 +56,7 @@ object SettingsTranslationScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val graph = remember { context.metroGraph<TranslationGraph>() }
         val manager = graph.translationManager
@@ -90,7 +93,9 @@ object SettingsTranslationScreen : SearchableSettings {
             }
         }
         importing?.let { (uri, preview) ->
-            ImportConflictsDialog(
+            ChapterConflictsDialog(
+                title = stringResource(MR.strings.pref_translation_import),
+                confirm = stringResource(MR.strings.translation_import_start),
                 conflicts = preview.conflicts,
                 onDismiss = { importing = null },
                 onConfirm = { overwrite ->
@@ -270,6 +275,11 @@ object SettingsTranslationScreen : SearchableSettings {
                 title = stringResource(MR.strings.pref_translation_transfer),
                 preferenceItems = listOf(
                     Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_translation_receive),
+                        subtitle = stringResource(MR.strings.pref_translation_receive_summary),
+                        onClick = { navigator.push(ReceiveTranslationsScreen()) },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
                         title = stringResource(MR.strings.pref_translation_import),
                         subtitle = stringResource(MR.strings.pref_translation_import_summary),
                         onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
@@ -308,8 +318,15 @@ object SettingsTranslationScreen : SearchableSettings {
     private const val AI_STUDIO = "https://aistudio.google.com/apikey"
 }
 
+/** Asks, for chapters already translated here, whether to keep them or overwrite them, one by one or for all. */
 @Composable
-private fun ImportConflictsDialog(conflicts: List<String>, onDismiss: () -> Unit, onConfirm: (Set<String>) -> Unit) {
+internal fun ChapterConflictsDialog(
+    title: String,
+    confirm: String,
+    conflicts: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<String>) -> Unit,
+) {
     var overwrite by remember { mutableStateOf(emptySet<String>()) }
     var applyAll by remember { mutableStateOf(false) }
     fun choose(name: String, replace: Boolean) {
@@ -321,7 +338,7 @@ private fun ImportConflictsDialog(conflicts: List<String>, onDismiss: () -> Unit
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(MR.strings.pref_translation_import)) },
+        title = { Text(title) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(MR.strings.translation_import_conflicts, conflicts.size))
@@ -352,7 +369,7 @@ private fun ImportConflictsDialog(conflicts: List<String>, onDismiss: () -> Unit
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(overwrite) }) { Text(stringResource(MR.strings.translation_import_start)) }
+            TextButton(onClick = { onConfirm(overwrite) }) { Text(confirm) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(MR.strings.action_cancel)) } },
     )

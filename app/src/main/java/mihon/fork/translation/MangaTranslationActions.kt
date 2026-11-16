@@ -101,6 +101,9 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 
     var confirmDeleteAll by remember { mutableStateOf(false) }
     var showRecap by remember { mutableStateOf(false) }
+    // Chapter file names to send; empty set means the whole series
+    var sharing by remember { mutableStateOf<Set<String>?>(null) }
+    var confirmDeleteSelected by remember { mutableStateOf<List<Chapter>>(emptyList()) }
     val exportLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             uri ?: return@rememberLauncherForActivityResult
@@ -142,20 +145,43 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     val translateTitle = stringResource(MR.strings.action_translate)
     val moreTitle = stringResource(MR.strings.action_translate_more)
     val autoScrollTitle = stringResource(MR.strings.action_auto_scroll)
+    val shareTitle = stringResource(MR.strings.translation_share_selected)
+    val deleteTitle = stringResource(MR.strings.translation_delete_selected)
     val selected = state.selectedChapters
-    val actions = remember(selected, translateTitle) {
+    // Read here so the toolbar follows translations finishing or being deleted
+    val translatedNames = TranslatedChapters.get(manga.id)
+    val actions = remember(selected, translateTitle, translatedNames) {
+        val translatedSelected = selected.map { it.chapter }.filter { TranslatedChapters.isTranslated(it) }
         MangaToolbarExtras.Actions(
-            selection = listOf(
-                AppBar.Action(
-                    title = translateTitle,
-                    icon = MaterialSymbols.Rounded.Translate,
-                    onClick = {
-                        val ids = selected.map { it.chapter.id }.toSet()
-                        enqueue { chapters, _ -> chapters.filter { it.id in ids } }
-                        viewModel.toggleAllSelection(false)
-                    },
-                ),
-            ),
+            selection = buildList {
+                add(
+                    AppBar.Action(
+                        title = translateTitle,
+                        icon = MaterialSymbols.Rounded.Translate,
+                        onClick = {
+                            val ids = selected.map { it.chapter.id }.toSet()
+                            enqueue { chapters, _ -> chapters.filter { it.id in ids } }
+                            viewModel.toggleAllSelection(false)
+                        },
+                    ),
+                )
+                if (translatedSelected.isNotEmpty()) {
+                    add(
+                        AppBar.Action(
+                            title = shareTitle,
+                            icon = MaterialSymbols.Rounded.Share,
+                            onClick = { sharing = translatedSelected.map { storage.chapterName(it) }.toSet() },
+                        ),
+                    )
+                    add(
+                        AppBar.Action(
+                            title = deleteTitle,
+                            icon = MaterialSymbols.Rounded.DeleteSweep,
+                            onClick = { confirmDeleteSelected = translatedSelected },
+                        ),
+                    )
+                }
+            },
             overflow = listOf(
                 AppBar.OverflowAction(title = moreTitle, onClick = { showDialog = true }),
                 AppBar.OverflowAction(title = autoScrollTitle, onClick = { ChapterAutoScroll.request(manga.id) }),
@@ -180,6 +206,39 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                         withContext(Dispatchers.IO) { manager.enqueueRecap(manga, request) }
                         context.toast(MR.strings.translation_recap_queued)
                     }
+                }
+            },
+        )
+    }
+
+    sharing?.let { names ->
+        ShareTranslationsDialog(
+            manga = manga,
+            preselected = names.takeIf { it.isNotEmpty() },
+            onDismiss = {
+                sharing = null
+                viewModel.toggleAllSelection(false)
+            },
+        )
+    }
+
+    if (confirmDeleteSelected.isNotEmpty()) {
+        val chapters = confirmDeleteSelected
+        AlertDialog(
+            onDismissRequest = { confirmDeleteSelected = emptyList() },
+            text = { Text(stringResource(MR.strings.translation_delete_selected_confirm, chapters.size)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDeleteSelected = emptyList()
+                        viewModel.toggleAllSelection(false)
+                        scope.launch(Dispatchers.IO) { chapters.forEach { storage.deleteChapter(manga, it) } }
+                    },
+                ) { Text(stringResource(MR.strings.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteSelected = emptyList() }) {
+                    Text(stringResource(MR.strings.action_cancel))
                 }
             },
         )
@@ -248,6 +307,10 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                 showDialog = false
                 exportLauncher.launch("${manga.title}.zip")
             },
+            onShare = {
+                showDialog = false
+                sharing = emptySet()
+            },
             onContext = {
                 showDialog = false
                 navigator.push(SeriesContextScreen(manga.id))
@@ -276,6 +339,7 @@ private fun TranslateDialog(
     onRecap: () -> Unit,
     onContext: () -> Unit,
     onExport: () -> Unit,
+    onShare: () -> Unit,
     onRerender: () -> Unit,
     onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -369,6 +433,12 @@ private fun TranslateDialog(
                 MR.strings.translation_rerender_desc,
 
                 onClick = onRerender,
+            )
+            SheetItem(
+                MaterialSymbols.Rounded.Share,
+                MR.strings.translation_share,
+                MR.strings.translation_share_desc,
+                onClick = onShare,
             )
             SheetItem(
                 MaterialSymbols.Rounded.Share,
