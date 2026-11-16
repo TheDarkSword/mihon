@@ -169,12 +169,53 @@ private fun ShareChoices(
     onAddress: (String) -> Unit,
     error: String?,
 ) {
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
     Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        ChapterPicker(chapters, selected, onSelected)
+
+        Text(stringResource(MR.strings.translation_share_receiver), style = MaterialTheme.typography.labelLarge)
+        when (val list = found) {
+            null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(
+                    stringResource(MR.strings.translation_share_searching),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            else -> {
+                if (list.isEmpty()) Text(stringResource(MR.strings.translation_share_none_found))
+                list.forEach { item ->
+                    FilterChip(
+                        selected = address == item.address,
+                        onClick = { onAddress(item.address) },
+                        label = { Text(item.name) },
+                    )
+                }
+                TextButton(onClick = onSearchAgain) {
+                    Text(stringResource(MR.strings.translation_pc_search_again))
+                }
+            }
+        }
+        OutlinedTextField(
+            value = address,
+            onValueChange = { onAddress(it.trim()) },
+            label = { Text(stringResource(MR.strings.translation_share_address)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+/** Translated chapters with All, None, a range and single checks. */
+@Composable
+fun ChapterPicker(chapters: List<String>, selected: Set<String>, onSelected: (Set<String>) -> Unit) {
+    var from by remember { mutableStateOf("") }
+    var to by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(MR.strings.translation_share_chapters, selected.size, chapters.size),
             style = MaterialTheme.typography.labelLarge,
@@ -233,40 +274,39 @@ private fun ShareChoices(
                 }
             }
         }
-
-        Text(stringResource(MR.strings.translation_share_receiver), style = MaterialTheme.typography.labelLarge)
-        when (val list = found) {
-            null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Text(
-                    stringResource(MR.strings.translation_share_searching),
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            else -> {
-                if (list.isEmpty()) Text(stringResource(MR.strings.translation_share_none_found))
-                list.forEach { item ->
-                    FilterChip(
-                        selected = address == item.address,
-                        onClick = { onAddress(item.address) },
-                        label = { Text(item.name) },
-                    )
-                }
-                TextButton(onClick = onSearchAgain) {
-                    Text(stringResource(MR.strings.translation_pc_search_again))
-                }
-            }
-        }
-        OutlinedTextField(
-            value = address,
-            onValueChange = { onAddress(it.trim()) },
-            label = { Text(stringResource(MR.strings.translation_share_address)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
+}
+
+/** Picks translated chapters of [manga] to translate again with the PC. */
+@Composable
+fun RetranslateDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (Set<String>) -> Unit) {
+    val context = LocalContext.current
+    val storage = remember { context.metroGraph<TranslationGraph>().translationStorage }
+    var chapters by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selected by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(manga.id) {
+        chapters = withContext(Dispatchers.IO) { storage.translated(manga) }.sortedBy { number(it) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(MR.strings.translation_retranslate_pc)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    stringResource(MR.strings.translation_retranslate_pc_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                ChapterPicker(chapters, selected) { selected = it }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = selected.isNotEmpty(), onClick = { onConfirm(selected) }) {
+                Text(stringResource(MR.strings.action_translate))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(MR.strings.action_cancel)) } },
+    )
 }
 
 private fun number(name: String) = name.removeSuffix(".cbz").toDoubleOrNull() ?: Double.MAX_VALUE

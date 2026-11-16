@@ -35,11 +35,14 @@ import mihon.translation.llm.GeminiClient
 import mihon.translation.llm.LlmException
 import mihon.translation.model.TextBlock
 import mihon.translation.model.TranslatedLine
+import mihon.translation.pc.PcAligned
 import mihon.translation.pc.PcClient
 import mihon.translation.pc.PcException
 import mihon.translation.pc.PcJob
 import mihon.translation.pc.PcJobSpec
+import mihon.translation.pc.PcRecapSpec
 import mihon.translation.pc.PcResult
+import mihon.translation.pc.PcReviewSpec
 import mihon.translation.pc.PcSeries
 import mihon.translation.pc.PcStatus
 import tachiyomi.domain.chapter.interactor.GetChapter
@@ -50,8 +53,11 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.R
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -123,13 +129,17 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                 val job = manager.beginAttempt(next)
                 try {
                     when {
-                        job.recap != null -> recap(job, job.recap)
                         job.render -> rerender(job, pipeline)
                         job.onPc && pc.isPaired() -> {
-                            // The chapter stays queued until the PC sends the translation back
-                            prepareForPc(job, pipeline)
+                            // The job stays queued until the PC sends its result back
+                            when {
+                                job.recap != null -> prepareRecapForPc(job, job.recap)
+                                job.review -> sendReview(job)
+                                else -> prepareForPc(job, pipeline)
+                            }
                             continue
                         }
+                        job.recap != null -> recap(job, job.recap)
                         else -> translate(job, pipeline)
                     }
                     manager.remove(job)
@@ -170,7 +180,7 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         if (done > 0) notify(ID_RESULT, applicationContext.getString(R.string.translation_done, done))
         val queue = manager.queue.value
-        val geminiLeft = queue.filter { !it.render && !(it.onPc && pc.isPaired()) }
+        val geminiLeft = queue.filter { !it.render && !it.review && !it.retranslate && !(it.onPc && pc.isPaired()) }
         if (geminiLeft.isNotEmpty()) {
             val pausedUntil = preferences.pausedUntil.get()
             when {
@@ -231,6 +241,14 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         val running = status.running?.takeIf { it.id in mine }
         val position = status.queue.filter { it.state == "queued" }.indexOfFirst { it.id in mine }
         val head = when {
+            running?.type == "recap" -> applicationContext.getString(
+                R.string.translation_pc_recap_running,
+                running.seriesTitle,
+            )
+            running?.type == "review" -> applicationContext.getString(
+                R.string.translation_pc_review_running,
+                running.seriesTitle,
+            )
             running != null -> applicationContext.getString(
                 R.string.translation_pc_running,
                 running.seriesTitle,
@@ -261,13 +279,19 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
         val gemini = !geminiPaused && manager.hasKey()
         return queue.firstOrNull { job ->
             when {
-                job.recap != null -> gemini
                 job.render -> true
-                job.onPc && paired -> !job.pcPrepared && queue.none { it.mangaId == job.mangaId && it.recap != null }
+                // Chapters wait until their series' recap has been read here and sent: the PC builds it first
+                job.onPc && paired -> !job.pcPrepared && (!job.isChapter || !recapPending(queue, job.mangaId))
+                // Only the PC reviews the memory or translates again a translated chapter
+                job.review || job.retranslate -> false
+                job.recap != null -> gemini
                 else -> gemini
             }
         }
     }
+
+    private fun recapPending(queue: List<TranslationJob>, mangaId: Long) =
+        queue.any { it.mangaId == mangaId && it.recap != null && !it.pcPrepared }
 
     /** Detection and OCR here, then the package goes to the PC, right away if it answers. */
     private suspend fun prepareForPc(job: TranslationJob, pipeline: TranslationPipeline) {
@@ -290,15 +314,22 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                 deleteRecursively()
                 mkdirs()
             }
+            val known = if (job.retranslate) {
+                storage.chapterFile(manga, chapter)?.let { readTranslation(it) }?.blocks
+                    ?: error("No saved translation to translate again")
+            } else {
+                null
+            }
             val blocks = pipeline.prepareForPc(
                 key = "${manga.id}:${chapter.id}",
                 input = input,
                 series = manga.title,
                 zip = pc.packageFile(job.chapterId),
                 progress = { step -> update(manga, label, step) },
+                known = known,
             ) { lines, images ->
                 PcJobSpec(
-                    clientKey = "${job.chapterId}-${job.pcTries}",
+                    clientKey = UUID.randomUUID().toString(),
                     model = job.model.ifBlank { preferences.pcModel.get() },
                     series = PcSeries(key, manga.title),
                     chapter = chapter.chapterNumber.toFloat(),
@@ -356,6 +387,7 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                     found == null -> manager.replace(
                         job.copy(pcPrepared = false, pcRemoteId = null, pcTries = job.pcTries + 1),
                     )
+                    found.isDone && !job.isChapter -> finishMemoryJob(job, found)
                     found.isDone -> if (letterFromPc(job, found, pipeline)) {
                         done++
                         lettered += job.mangaId
@@ -374,6 +406,8 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
                         done++
                         lettered += mangaId
                     }
+                } else if (found.type == "review") {
+                    reviewFromPc(found)
                 } else if (manager.queue.value.none { it.pcRemoteId == found.id }) {
                     // Finished after the chapter left the queue (moved to Gemini or queue cleared)
                     runCatching { pc.withClient { it.ack(found.id) } }
@@ -495,19 +529,107 @@ class TranslationWorker(context: Context, params: WorkerParameters) : CoroutineW
     private suspend fun recap(job: TranslationJob, request: RecapRequest) {
         val manga = getManga.await(job.mangaId) ?: error("Manga not found")
         val client = GeminiClient({ manager.keys.get(ApiKeyStore.GEMINI) }) { _, _ -> manager.recordRequest() }
-        RecapRunner(
-            applicationContext,
-            sourceManager,
-            getManga,
-            getChaptersByMangaId,
-            downloadProvider,
-            storage,
-            client,
-        )
-            .run(manga, request) { step ->
-                updateTitle(applicationContext.getString(R.string.translation_recap_progress, manga.title), step)
-            }
+        recapRunner().run(manga, request, client) { step ->
+            updateTitle(applicationContext.getString(R.string.translation_recap_progress, manga.title), step)
+        }
         notify(ID_RESULT, applicationContext.getString(R.string.translation_recap_done, manga.title))
+    }
+
+    private fun recapRunner() =
+        RecapRunner(applicationContext, sourceManager, getManga, getChaptersByMangaId, downloadProvider, storage)
+
+    /** Reads the Italian chapters here, the PC builds the context from them. */
+    private suspend fun prepareRecapForPc(job: TranslationJob, request: RecapRequest) {
+        val manga = getManga.await(job.mangaId) ?: error("Manga not found")
+        val title = applicationContext.getString(R.string.translation_recap_progress, manga.title)
+        val extracted = recapRunner().extract(manga, request) { step -> updateTitle(title, step) }
+        val key = pc.seriesKey(manga)
+        pc.rememberSeries(key, manga.id)
+        val spec = PcRecapSpec(
+            clientKey = UUID.randomUUID().toString(),
+            model = job.model.ifBlank { preferences.pcModel.get() },
+            series = PcSeries(key, manga.title),
+            chapter = request.until.toFloat(),
+            aligned = extracted.aligned.map { (en, it) -> PcAligned(en, it) },
+            italian = extracted.italian,
+            context = storage.readContext(manga) ?: SeriesContext(series = manga.title),
+            contextBase = pc.base(key),
+        )
+        writePackage(job, TranslationPipeline.json.encodeToString(PcRecapSpec.serializer(), spec))
+        recapRunner().dropCheckpoints(manga)
+        sendPackage(job, manga, title)
+    }
+
+    /** A memory review needs nothing from the phone but its latest edits. */
+    private suspend fun sendReview(job: TranslationJob) {
+        val manga = getManga.await(job.mangaId) ?: error("Manga not found")
+        val key = pc.seriesKey(manga)
+        pc.rememberSeries(key, manga.id)
+        val spec = PcReviewSpec(
+            clientKey = UUID.randomUUID().toString(),
+            model = job.model.ifBlank { preferences.pcModel.get() },
+            series = PcSeries(key, manga.title),
+            context = storage.readContext(manga) ?: SeriesContext(series = manga.title),
+            contextBase = pc.base(key),
+        )
+        writePackage(job, TranslationPipeline.json.encodeToString(PcReviewSpec.serializer(), spec))
+        sendPackage(job, manga, applicationContext.getString(R.string.translation_pc_title))
+    }
+
+    private fun writePackage(job: TranslationJob, spec: String) {
+        val dir = pc.pendingDir(job.chapterId).apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        ZipOutputStream(File(dir, "package.zip").outputStream().buffered()).use { zip ->
+            zip.putNextEntry(ZipEntry("job.json"))
+            zip.write(spec.toByteArray())
+            zip.closeEntry()
+        }
+    }
+
+    private suspend fun sendPackage(job: TranslationJob, manga: Manga, title: String) {
+        val prepared = job.copy(pcPrepared = true, attempts = 0)
+        manager.replace(prepared)
+        updateTitle(title, applicationContext.getString(R.string.translation_step_send_pc))
+        try {
+            upload(prepared)
+        } catch (e: PcException) {
+            logcat(LogPriority.INFO, TAG) { "PC not reachable, ${manga.title} waits: ${e.message}" }
+        }
+    }
+
+    /** A recap or a review finished on the PC: its memory comes back with the next sync. */
+    private suspend fun finishMemoryJob(job: TranslationJob, remote: PcJob) {
+        val manga = getManga.await(job.mangaId) ?: error("Manga not found")
+        val notes = runCatching { pc.withClient { it.result(remote.id) }.notes }.getOrDefault("")
+        pc.sync(manga)
+        runCatching { pc.withClient { it.ack(remote.id) } }
+        pc.clearPending(job.chapterId)
+        manager.remove(job)
+        notifyMemory(manga.title, job.recap != null, notes)
+    }
+
+    private fun notifyMemory(title: String, recap: Boolean, notes: String) {
+        notify(
+            ID_RESULT,
+            if (recap) {
+                applicationContext.getString(R.string.translation_recap_done, title)
+            } else {
+                applicationContext.getString(R.string.translation_review_done, title, notes.ifBlank { "-" })
+            },
+        )
+    }
+
+    /** A review the PC started by itself, every few chapters. */
+    private suspend fun reviewFromPc(remote: PcJob): Long? {
+        val mangaId = pc.mangaFor(remote.seriesKey) ?: return null
+        val manga = getManga.await(mangaId) ?: return null
+        val notes = runCatching { pc.withClient { it.result(remote.id) }.notes }.getOrDefault("")
+        pc.sync(manga)
+        runCatching { pc.withClient { it.ack(remote.id) } }
+        notifyMemory(manga.title, false, notes)
+        return mangaId
     }
 
     private suspend fun translate(job: TranslationJob, pipeline: TranslationPipeline) {

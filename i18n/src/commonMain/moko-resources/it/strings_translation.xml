@@ -204,4 +204,13 @@
     <string name="translation_receive_done">%1$d capitoli ricevuti in %2$s</string>
     <string name="translation_delete_selected">Elimina traduzioni</string>
     <string name="translation_delete_selected_confirm">Eliminare la traduzione di %d capitoli?</string>
+    <string name="translation_retranslate_pc">Ritraduci con il PC</string>
+    <string name="translation_retranslate_pc_desc">Capitoli già tradotti, ad esempio con Gemini: stesse zone di testo, nuova traduzione</string>
+    <string name="translation_retranslate_queued">%d capitoli in coda per il PC</string>
+    <string name="translation_review_pc">Revisiona con il PC</string>
+    <string name="translation_review_queued">Revisione della memoria in coda per il PC</string>
+    <string name="translation_review_done">Memoria di %1$s revisionata: %2$s</string>
+    <string name="translation_pc_recap_running">Costruzione del contesto di %s</string>
+    <string name="translation_pc_review_running">Revisione della memoria di %s</string>
+    <string name="translation_recap_engine">Costruisci con</string>
 </resources>

@@ -104,6 +104,14 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     // Chapter file names to send; empty set means the whole series
     var sharing by remember { mutableStateOf<Set<String>?>(null) }
     var confirmDeleteSelected by remember { mutableStateOf<List<Chapter>>(emptyList()) }
+    var retranslating by remember { mutableStateOf(false) }
+
+    fun retranslate(chapters: List<Chapter>) {
+        scope.launch {
+            val count = withContext(Dispatchers.IO) { manager.enqueueRetranslate(manga, chapters) }
+            context.toast(context.getString(tachiyomi.i18n.R.string.translation_retranslate_queued, count))
+        }
+    }
     val exportLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             uri ?: return@rememberLauncherForActivityResult
@@ -147,10 +155,12 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     val autoScrollTitle = stringResource(MR.strings.action_auto_scroll)
     val shareTitle = stringResource(MR.strings.translation_share_selected)
     val deleteTitle = stringResource(MR.strings.translation_delete_selected)
+    val retranslateTitle = stringResource(MR.strings.translation_retranslate_pc)
+    val paired = pc.isPaired()
     val selected = state.selectedChapters
     // Read here so the toolbar follows translations finishing or being deleted
     val translatedNames = TranslatedChapters.get(manga.id)
-    val actions = remember(selected, translateTitle, translatedNames) {
+    val actions = remember(selected, translateTitle, translatedNames, paired) {
         val translatedSelected = selected.map { it.chapter }.filter { TranslatedChapters.isTranslated(it) }
         MangaToolbarExtras.Actions(
             selection = buildList {
@@ -165,6 +175,18 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                         },
                     ),
                 )
+                if (translatedSelected.isNotEmpty() && paired) {
+                    add(
+                        AppBar.Action(
+                            title = retranslateTitle,
+                            icon = MaterialSymbols.Rounded.Autorenew,
+                            onClick = {
+                                retranslate(translatedSelected)
+                                viewModel.toggleAllSelection(false)
+                            },
+                        ),
+                    )
+                }
                 if (translatedSelected.isNotEmpty()) {
                     add(
                         AppBar.Action(
@@ -196,17 +218,30 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     if (showRecap) {
         RecapDialog(
             manga = manga,
+            pcPaired = pc.isPaired(),
+            initialEngine = preferences.engine.get(),
             onDismiss = { showRecap = false },
-            onConfirm = { request ->
+            onConfirm = { request, engine ->
                 showRecap = false
-                if (!manager.hasKey()) {
+                if (engine == TranslationJob.ENGINE_GEMINI && !manager.hasKey()) {
                     context.toast(MR.strings.translation_missing_key)
                 } else {
                     scope.launch {
-                        withContext(Dispatchers.IO) { manager.enqueueRecap(manga, request) }
+                        withContext(Dispatchers.IO) { manager.enqueueRecap(manga, request, engine) }
                         context.toast(MR.strings.translation_recap_queued)
                     }
                 }
+            },
+        )
+    }
+
+    if (retranslating) {
+        RetranslateDialog(
+            manga = manga,
+            onDismiss = { retranslating = false },
+            onConfirm = { names ->
+                retranslating = false
+                retranslate(state.chapters.map { it.chapter }.filter { storage.chapterName(it) in names })
             },
         )
     }
@@ -311,6 +346,10 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
                 showDialog = false
                 sharing = emptySet()
             },
+            onRetranslate = {
+                showDialog = false
+                retranslating = true
+            },
             onContext = {
                 showDialog = false
                 navigator.push(SeriesContextScreen(manga.id))
@@ -340,6 +379,7 @@ private fun TranslateDialog(
     onContext: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    onRetranslate: () -> Unit,
     onRerender: () -> Unit,
     onAutoTranslate: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -427,6 +467,14 @@ private fun TranslateDialog(
 
                 onClick = onRecap,
             )
+            if (pcPaired) {
+                SheetItem(
+                    MaterialSymbols.Rounded.Autorenew,
+                    MR.strings.translation_retranslate_pc,
+                    MR.strings.translation_retranslate_pc_desc,
+                    onClick = onRetranslate,
+                )
+            }
             SheetItem(
                 MaterialSymbols.Rounded.Palette,
                 MR.strings.translation_rerender,

@@ -1,6 +1,7 @@
 package mihon.translation.pc
 
 import kotlinx.serialization.Serializable
+import mihon.translation.context.ChapterText
 import mihon.translation.context.SeriesContext
 
 /** Shapes exchanged with the translator running on the reader's PC (mihon-it-translator, API v1). */
@@ -24,6 +25,38 @@ data class PcJobSpec(
     val lines: List<PcLineSpec>,
     val images: List<PcImageSpec>,
     /** The series memory on the phone and the last copy received from the PC, to merge the reader's edits. */
+    val context: SeriesContext? = null,
+    val contextBase: SeriesContext? = null,
+)
+
+/** Chapters the reader already read, as read by the phone, for the PC to build the series memory. */
+@Serializable
+data class PcRecapSpec(
+    val type: String = "recap",
+    val clientKey: String,
+    val model: String,
+    val series: PcSeries,
+    /** The reader read up to this chapter. */
+    val chapter: Float,
+    val aligned: List<PcAligned>,
+    val italian: List<ChapterText>,
+    val images: List<PcImageSpec> = emptyList(),
+    val context: SeriesContext? = null,
+    val contextBase: SeriesContext? = null,
+)
+
+@Serializable
+data class PcAligned(val en: ChapterText, val it: ChapterText)
+
+/** Asks the PC to clean the series memory: duplicates, inconsistent forms, an outdated story so far. */
+@Serializable
+data class PcReviewSpec(
+    val type: String = "review",
+    val clientKey: String,
+    val model: String,
+    val series: PcSeries,
+    val chapter: Float = 0f,
+    val images: List<PcImageSpec> = emptyList(),
     val context: SeriesContext? = null,
     val contextBase: SeriesContext? = null,
 )
@@ -87,6 +120,8 @@ data class PcResult(
     val lines: List<PcLine>,
     val corrections: List<PcCorrection> = emptyList(),
     val context: SeriesContext? = null,
+    /** What a memory review changed, in Italian. */
+    val notes: String = "",
 )
 
 /** What the PC answers to a phone waiting for news: everything as it is right after the change. */

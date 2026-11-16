@@ -42,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -98,10 +100,31 @@ class SeriesContextScreen(private val mangaId: Long) : Screen() {
 
         Scaffold(
             topBar = {
+                val reviewTitle = stringResource(MR.strings.translation_review_pc)
                 AppBar(
                     title = stringResource(MR.strings.translation_context),
                     subtitle = manga?.title,
                     navigateUp = navigator::pop,
+                    actions = {
+                        if (graph.pcTranslator.isPaired()) {
+                            AppBarActions(
+                                listOf(
+                                    AppBar.OverflowAction(
+                                        title = reviewTitle,
+                                        onClick = {
+                                            val m = manga ?: return@OverflowAction
+                                            scope.launch {
+                                                val queued = withContext(Dispatchers.IO) {
+                                                    graph.translationManager.enqueueReview(m)
+                                                }
+                                                if (queued) context.toast(MR.strings.translation_review_queued)
+                                            }
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    },
                     scrollBehavior = it,
                 )
             },

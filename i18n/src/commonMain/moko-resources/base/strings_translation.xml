@@ -205,4 +205,13 @@
     <string name="translation_receive_done">%1$d chapters received in %2$s</string>
     <string name="translation_delete_selected">Delete translations</string>
     <string name="translation_delete_selected_confirm">Delete the translation of %d chapters?</string>
+    <string name="translation_retranslate_pc">Translate again with the PC</string>
+    <string name="translation_retranslate_pc_desc">Chapters already translated, for example with Gemini: same text regions, new translation</string>
+    <string name="translation_retranslate_queued">%d chapters queued for the PC</string>
+    <string name="translation_review_pc">Review with the PC</string>
+    <string name="translation_review_queued">Memory review queued for the PC</string>
+    <string name="translation_review_done">Memory of %1$s reviewed: %2$s</string>
+    <string name="translation_pc_recap_running">Building the context of %s</string>
+    <string name="translation_pc_review_running">Reviewing the memory of %s</string>
+    <string name="translation_recap_engine">Build with</string>
 </resources>

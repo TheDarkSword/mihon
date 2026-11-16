@@ -35,10 +35,32 @@ class RecapRunner(
     private val getChaptersByMangaId: GetChaptersByMangaId,
     private val downloadProvider: DownloadProvider,
     private val storage: TranslationStorage,
-    private val client: GeminiClient,
 ) {
 
-    suspend fun run(manga: Manga, request: RecapRequest, progress: (String) -> Unit) {
+    /** The chapters read on the phone: pairs in both languages to match names, Italian ones for the story. */
+    class Extracted(val aligned: List<Pair<ChapterText, ChapterText>>, val italian: List<ChapterText>)
+
+    /** Builds the context with Gemini right away. */
+    suspend fun run(manga: Manga, request: RecapRequest, client: GeminiClient, progress: (String) -> Unit) {
+        val extracted = extract(manga, request, progress)
+        val base = storage.readContext(manga) ?: SeriesContext(series = manga.title)
+        val built = ContextBuilder(client).build(
+            base,
+            request.until.toFloat(),
+            extracted.aligned,
+            extracted.italian,
+            progress,
+        )
+        storage.writeContext(manga, built)
+        dropCheckpoints(manga)
+    }
+
+    fun dropCheckpoints(manga: Manga) = checkpoints(manga).delete()
+
+    private fun checkpoints(manga: Manga) =
+        CheckpointCache(File(context.cacheDir, "translation")).entry("recap:${manga.id}")
+
+    suspend fun extract(manga: Manga, request: RecapRequest, progress: (String) -> Unit): Extracted {
         val italianSource = sourceManager.get(request.sourceId) as? HttpSource ?: error("Italian source not installed")
         val englishSource = sourceManager.getOrStub(manga.source) as? HttpSource
         val reference = SManga.create().apply {
@@ -61,7 +83,7 @@ class RecapRunner(
             it.chapter_number
         }.filter { it in englishChapters }.takeLast(ALIGNED)
 
-        val checkpoints = CheckpointCache(File(context.cacheDir, "translation")).entry("recap:${manga.id}")
+        val checkpoints = checkpoints(manga)
         val italian = mutableListOf<ChapterText>()
         val aligned = mutableListOf<Pair<ChapterText, ChapterText>>()
         TextExtractor(context).use { extractor ->
@@ -91,10 +113,7 @@ class RecapRunner(
             }
         }
 
-        val base = storage.readContext(manga) ?: SeriesContext(series = manga.title)
-        val built = ContextBuilder(client).build(base, request.until.toFloat(), aligned, italian, progress)
-        storage.writeContext(manga, built)
-        checkpoints.delete()
+        return Extracted(aligned, italian)
     }
 
     /** Pages of a chapter already downloaded by Mihon, as a folder of images or a CBZ. */

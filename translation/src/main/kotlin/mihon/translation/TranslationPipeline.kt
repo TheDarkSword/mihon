@@ -186,12 +186,13 @@ class TranslationPipeline(
         series: String,
         zip: File,
         progress: (String) -> Unit,
+        /** Text regions of a chapter translated before: no new detection and OCR. */
+        known: List<TextBlock>? = null,
         spec: (List<PcLineSpec>, List<PcImageSpec>) -> PcJobSpec,
     ): List<TextBlock> = withContext(Dispatchers.Default) {
         val checkpoint = cache.entry(key)
         openStrip(input).use { strip ->
-            val detections = detect(strip, checkpoint, progress) {}
-            val blocks = read(strip, checkpoint, detections, progress) {}
+            val blocks = known ?: read(strip, checkpoint, detect(strip, checkpoint, progress) {}, progress) {}
             val lines = PcPackage.lines(blocks, series)
             val ids = lines.map { it.id }.toSet()
             progress("Preparing ${lines.size} lines for the PC")

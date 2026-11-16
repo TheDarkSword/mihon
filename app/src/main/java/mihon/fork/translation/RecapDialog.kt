@@ -42,7 +42,13 @@ import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.ceil
 
 @Composable
-fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -> Unit) {
+fun RecapDialog(
+    manga: Manga,
+    pcPaired: Boolean,
+    initialEngine: String,
+    onDismiss: () -> Unit,
+    onConfirm: (RecapRequest, String) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sourceManager = remember { context.appGraph.sourceManager }
@@ -60,6 +66,7 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
     var library by remember { mutableStateOf<List<Pair<Manga, HttpSource>>>(emptyList()) }
     var localMangaId by remember { mutableStateOf<Long?>(null) }
     var filter by remember { mutableStateOf("") }
+    var engine by remember { mutableStateOf(if (pcPaired) initialEngine else TranslationJob.ENGINE_GEMINI) }
     val graph = remember { context.metroGraph<TranslationGraph>() }
 
     LaunchedEffect(Unit) {
@@ -95,6 +102,23 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(MR.strings.translation_recap_summary), style = MaterialTheme.typography.bodySmall)
+                if (pcPaired) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(MR.strings.translation_recap_engine),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
+                        listOf(TranslationJob.ENGINE_PC to "PC", TranslationJob.ENGINE_GEMINI to "Gemini")
+                            .forEach { (value, label) ->
+                                FilterChip(
+                                    selected = engine == value,
+                                    onClick = { engine = value },
+                                    label = { Text(label) },
+                                )
+                            }
+                    }
+                }
                 val available = sources
                 when {
                     available == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -236,6 +260,7 @@ fun RecapDialog(manga: Manga, onDismiss: () -> Unit, onConfirm: (RecapRequest) -
                     val reference = picked ?: return@TextButton
                     onConfirm(
                         RecapRequest(s.id, reference.url, reference.title, until.toDouble(), precision, localMangaId),
+                        engine,
                     )
                 },
             ) { Text(stringResource(MR.strings.translation_recap_start)) }

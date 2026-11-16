@@ -36,10 +36,17 @@ data class TranslationJob(
     val pcPrepared: Boolean = false,
     /** Id of the job on the PC once the package is uploaded. */
     val pcRemoteId: String? = null,
-    /** Packages prepared again after the PC lost one: part of the key the PC uses to spot duplicates. */
+    /** Packages prepared again after the PC lost one. */
     val pcTries: Int = 0,
+    /** A chapter translated before (e.g. with Gemini), translated again on the PC over the same text regions. */
+    val retranslate: Boolean = false,
+    /** A review of the series memory on the PC. */
+    val review: Boolean = false,
 ) {
-    val onPc get() = engine == ENGINE_PC && recap == null && !render
+    /** Handled by the PC: chapters, and with it also recaps and memory reviews. */
+    val onPc get() = engine == ENGINE_PC && !render
+
+    val isChapter get() = recap == null && !render && !review
 
     /** Sent to the PC, or ready to be sent: nothing to do on the phone until the translation comes back. */
     val waitingOnPc get() = onPc && pcPrepared
@@ -145,11 +152,16 @@ class TranslationManager(
         if (moved.isEmpty()) return emptyList()
         val ids = moved.map { it.chapterId }.toSet()
         _queue.update { queue ->
-            queue.map {
-                if (it.chapterId in ids) {
-                    it.copy(engine = TranslationJob.ENGINE_GEMINI, model = "", pcPrepared = false, pcRemoteId = null)
-                } else {
-                    it
+            queue.mapNotNull {
+                when {
+                    it.chapterId !in ids -> it
+                    !geminiCan(it) -> null
+                    else -> it.copy(
+                        engine = TranslationJob.ENGINE_GEMINI,
+                        model = "",
+                        pcPrepared = false,
+                        pcRemoteId = null,
+                    )
                 }
             }
         }
@@ -157,6 +169,9 @@ class TranslationManager(
         TranslationWorker.start(context)
         return moved.filter { it.pcRemoteId != null }
     }
+
+    /** Leaves out what Gemini cannot do: memory reviews and translating again chapters already translated. */
+    private fun geminiCan(job: TranslationJob) = !job.review && !job.retranslate
 
     /** Queues the already translated chapters for re-rendering with the current text style. */
     fun enqueueRender(manga: Manga, chapters: List<Chapter>): Int {
@@ -171,9 +186,60 @@ class TranslationManager(
         return jobs.size
     }
 
+    /**
+     * Queues chapters already translated to be translated again on the PC, over the text regions saved with them.
+     */
+    fun enqueueRetranslate(manga: Manga, chapters: List<Chapter>, model: String = preferences.pcModel.get()): Int {
+        val queued = _queue.value.map { it.chapterId }.toSet()
+        val jobs = chapters
+            .filter { it.id !in queued && storage.isTranslated(manga, it) }
+            .map {
+                TranslationJob(
+                    manga.id,
+                    it.id,
+                    it.chapterNumber,
+                    manga.title,
+                    engine = TranslationJob.ENGINE_PC,
+                    model = model,
+                    retranslate = true,
+                )
+            }
+        if (jobs.isEmpty()) return 0
+        _queue.update { inReadingOrder(it + jobs) }
+        save()
+        TranslationWorker.start(context)
+        return jobs.size
+    }
+
+    /** Queues a review of the series memory on the PC, after the chapters of the series already queued. */
+    fun enqueueReview(manga: Manga, model: String = preferences.pcModel.get()): Boolean {
+        val job = TranslationJob(
+            manga.id,
+            reviewId(manga),
+            REVIEW_NUMBER,
+            manga.title,
+            engine = TranslationJob.ENGINE_PC,
+            model = model,
+            review = true,
+        )
+        if (_queue.value.any { it.chapterId == job.chapterId }) return false
+        _queue.update { inReadingOrder(it + job) }
+        save()
+        TranslationWorker.start(context)
+        return true
+    }
+
     /** Queues a recap ahead of the series' chapters, replacing a recap still waiting for the same series. */
-    fun enqueueRecap(manga: Manga, request: RecapRequest) {
-        val job = TranslationJob(manga.id, recapId(manga), RECAP_NUMBER, manga.title, recap = request)
+    fun enqueueRecap(manga: Manga, request: RecapRequest, engine: String = TranslationJob.ENGINE_GEMINI) {
+        val job = TranslationJob(
+            manga.id,
+            recapId(manga),
+            RECAP_NUMBER,
+            manga.title,
+            recap = request,
+            engine = engine,
+            model = if (engine == TranslationJob.ENGINE_PC) preferences.pcModel.get() else "",
+        )
         _queue.update { queue -> inReadingOrder(queue.filterNot { it.chapterId == job.chapterId } + job) }
         save()
         TranslationWorker.start(context)
@@ -278,7 +344,12 @@ class TranslationManager(
         /** Recaps sort before every chapter of their series. */
         const val RECAP_NUMBER = -1.0
 
+        /** Memory reviews sort after every chapter of their series. */
+        const val REVIEW_NUMBER = Double.MAX_VALUE
+
         fun recapId(manga: Manga) = -manga.id
+
+        fun reviewId(manga: Manga) = -manga.id - (1L shl 40)
 
         val QUOTA_ZONE: ZoneId = ZoneId.of("America/Los_Angeles")
     }
