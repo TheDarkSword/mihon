@@ -57,6 +57,9 @@ class ApiKeyStore(context: Context) {
 
     companion object {
         const val GEMINI = "gemini"
+
+        /** Token given by the paired PC translator. */
+        const val PC_TOKEN = "pc_token"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val ALIAS = "mihon_translation_keys"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"

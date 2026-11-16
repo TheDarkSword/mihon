@@ -47,4 +47,18 @@ class TranslationPreferences(preferenceStore: PreferenceStore) {
 
     /** Epoch millis until which the queue waits for the daily quota to reset. */
     val pausedUntil = preferenceStore.getLong("translation_paused_until", 0)
+
+    /** Who translates new chapters by default: [TranslationJob.ENGINE_GEMINI] or [TranslationJob.ENGINE_PC]. */
+    val engine = preferenceStore.getString("translation_engine", TranslationJob.ENGINE_GEMINI)
+
+    /** Model used on the PC: "opus" or "sonnet". */
+    val pcModel = preferenceStore.getString("translation_pc_model", TranslationJob.MODEL_OPUS)
+
+    /** Base URL of the paired PC, like http://192.168.1.10:47321. */
+    val pcAddress = preferenceStore.getString("translation_pc_address", "")
+
+    val pcName = preferenceStore.getString("translation_pc_name", "")
+
+    /** mDNS name of the paired PC, to find it again when its address changes. */
+    val pcService = preferenceStore.getString("translation_pc_service", "")
 }

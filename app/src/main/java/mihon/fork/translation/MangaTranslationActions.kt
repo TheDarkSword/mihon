@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +56,7 @@ import mihon.icons.materialsymbols.rounded.DeleteSweep
 import mihon.icons.materialsymbols.rounded.DoneAll
 import mihon.icons.materialsymbols.rounded.EditNote
 import mihon.icons.materialsymbols.rounded.FormatListNumbered
+import mihon.icons.materialsymbols.rounded.HourglassEmpty
 import mihon.icons.materialsymbols.rounded.Numbers
 import mihon.icons.materialsymbols.rounded.Palette
 import mihon.icons.materialsymbols.rounded.Share
@@ -89,6 +93,8 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     val graph = remember { context.metroGraph<TranslationGraph>() }
     val manager = graph.translationManager
     val storage = graph.translationStorage
+    val pc = graph.pcTranslator
+    val preferences = graph.translationPreferences
     val scope = rememberCoroutineScope()
     val manga = state.manga
     var showDialog by remember { mutableStateOf(false) }
@@ -113,7 +119,9 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     }
 
     fun enqueue(pick: (List<Chapter>, Set<String>) -> List<Chapter>) {
-        if (!manager.hasKey()) {
+        // Chapters for an unpaired PC go to Gemini, so only Gemini needs a key
+        val onPc = preferences.engine.get() == TranslationJob.ENGINE_PC && pc.isPaired()
+        if (!onPc && !manager.hasKey()) {
             context.toast(MR.strings.translation_missing_key)
             return
         }
@@ -196,7 +204,27 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
     }
 
     if (showDialog) {
+        val queue by manager.queue.collectAsState()
         TranslateDialog(
+            pcPaired = pc.isPaired(),
+            engine = if (preferences.engine.get() == TranslationJob.ENGINE_PC) {
+                preferences.pcModel.get()
+            } else {
+                TranslationJob.ENGINE_GEMINI
+            },
+            onEngine = { choice ->
+                if (choice == TranslationJob.ENGINE_GEMINI) {
+                    preferences.engine.set(TranslationJob.ENGINE_GEMINI)
+                } else {
+                    preferences.engine.set(TranslationJob.ENGINE_PC)
+                    preferences.pcModel.set(choice)
+                }
+            },
+            waitingOnPc = queue.count { it.onPc && it.mangaId == manga.id },
+            onUseGemini = {
+                showDialog = false
+                scope.launch(Dispatchers.IO) { moveToGemini(pc, manager, manga.id) }
+            },
             showTranslation = manager.showsTranslation(manga),
             onShowTranslation = { manager.setShowTranslation(manga, it) },
             autoTranslate = AutoTranslation.isEnabled(context, manga),
@@ -236,6 +264,11 @@ fun MangaTranslationActions(viewModel: MangaViewModel, state: MangaViewModel.Sta
 
 @Composable
 private fun TranslateDialog(
+    pcPaired: Boolean,
+    engine: String,
+    onEngine: (String) -> Unit,
+    waitingOnPc: Int,
+    onUseGemini: () -> Unit,
     showTranslation: Boolean,
     onShowTranslation: (Boolean) -> Unit,
     autoTranslate: Boolean,
@@ -256,6 +289,15 @@ private fun TranslateDialog(
     AdaptiveSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 16.dp)) {
             SheetSection(stringResource(MR.strings.translation_section_translate))
+            if (pcPaired) EngineChips(engine, onEngine)
+            if (waitingOnPc > 0) {
+                SheetItem(
+                    MaterialSymbols.Rounded.HourglassEmpty,
+                    stringResource(MR.strings.translation_pc_waiting_manga, waitingOnPc),
+                    stringResource(MR.strings.translation_pc_waiting_manga_desc),
+                    onClick = onUseGemini,
+                )
+            }
             SheetItem(MaterialSymbols.Rounded.DoneAll, MR.strings.translate_all, MR.strings.translate_all_desc) {
                 onPick { chapters, _ -> chapters }
             }
@@ -369,6 +411,37 @@ private fun TranslateDialog(
     }
 }
 
+/** PC with either model, or Gemini: the choice is remembered as the default. */
+@Composable
+private fun EngineChips(initial: String, onEngine: (String) -> Unit) {
+    var choice by remember { mutableStateOf(initial) }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Text(
+            stringResource(MR.strings.translation_engine_label),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.align(Alignment.CenterVertically),
+        )
+        listOf(
+            TranslationJob.MODEL_OPUS to "PC · Opus",
+            TranslationJob.MODEL_SONNET to "PC · Sonnet",
+            TranslationJob.ENGINE_GEMINI to "Gemini",
+        ).forEach { (value, label) ->
+            FilterChip(
+                selected = choice == value,
+                onClick = {
+                    choice = value
+                    onEngine(value)
+                },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun SheetSection(title: String) {
     Text(
@@ -384,6 +457,15 @@ private fun SheetItem(
     icon: ImageVector,
     title: StringResource,
     description: StringResource,
+    tint: Color = Color.Unspecified,
+    onClick: () -> Unit,
+) = SheetItem(icon, stringResource(title), stringResource(description), tint, onClick)
+
+@Composable
+private fun SheetItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
     tint: Color = Color.Unspecified,
     onClick: () -> Unit,
 ) {
@@ -404,7 +486,7 @@ private fun SheetItem(
         )
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(
-                stringResource(title),
+                title,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (tint ==
                     Color.Unspecified
@@ -415,7 +497,7 @@ private fun SheetItem(
                 },
             )
             Text(
-                stringResource(description),
+                description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

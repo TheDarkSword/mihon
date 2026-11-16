@@ -13,6 +13,7 @@ interface TranslationGraph {
     val translationManager: TranslationManager
     val translationPreferences: TranslationPreferences
     val translationStorage: TranslationStorage
+    val pcTranslator: PcTranslator
     val getFavorites: GetFavorites
     val getChaptersByMangaId: GetChaptersByMangaId
     val getManga: GetManga

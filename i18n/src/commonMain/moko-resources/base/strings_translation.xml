@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="translation">Translation</string>
-    <string name="pref_translation_summary">Gemini key, queue, cache</string>
+    <string name="pref_translation_summary">PC translator, Gemini key, queue</string>
     <string name="action_translate">Translate</string>
     <string name="action_translate_more">Translate…</string>
     <string name="translate_all">All chapters</string>
@@ -138,4 +138,43 @@
     <string name="translation_show_desc">Open the Italian version when there is one</string>
     <string name="translation_auto_desc">Queue new chapters after a library update</string>
     <string name="translation_delete_all_desc">Frees space, keeps glossary and context</string>
+    <string name="translation_step_send_pc">Sending to the PC</string>
+    <string name="translation_step_receive_pc">Receiving the translation from the PC</string>
+    <string name="translation_pc_unreachable">PC not reachable: %d chapters waiting</string>
+    <string name="translation_pc_paused">PC paused for the Claude limits until %1$s · %2$d chapters waiting</string>
+    <string name="translation_pc_working">Translating on the PC · %d chapters</string>
+    <string name="translation_pc_not_paired">Pair the PC in Settings → Translation</string>
+    <string name="pref_translation_pc">PC translator</string>
+    <string name="pref_translation_pc_device">PC</string>
+    <string name="pref_translation_pc_not_paired">Not paired: Claude Code on your PC translates, on the same Wi-Fi</string>
+    <string name="pref_translation_pc_paired">%1$s · %2$s</string>
+    <string name="pref_translation_engine">Default translator</string>
+    <string name="pref_translation_pc_model">Model on the PC</string>
+    <string name="translation_model_opus">Opus: the best, about 5 minutes per chapter</string>
+    <string name="translation_model_sonnet">Sonnet: faster, about 2.5 minutes per chapter</string>
+    <string name="pref_translation_pc_waiting">Chapters waiting for the PC</string>
+    <string name="pref_translation_pc_waiting_summary">%d chapters · tap to translate them with Gemini</string>
+    <string name="translation_use_gemini_confirm">Translate the %d chapters waiting for the PC with Gemini?</string>
+    <string name="translation_use_gemini">Use Gemini</string>
+    <string name="translation_pc_pair">Pair the PC</string>
+    <string name="translation_pc_searching">Looking for the PC on the Wi-Fi…</string>
+    <string name="translation_pc_none_found">No PC found. Check that the service is running and that the phone is on the same Wi-Fi, or type the address.</string>
+    <string name="translation_pc_search_again">Search again</string>
+    <string name="translation_pc_address">PC address (e.g. 192.168.1.10)</string>
+    <string name="translation_pc_request_code">Show the code on the PC</string>
+    <string name="translation_pc_code_hint">A notification with a six digit code appeared on the PC</string>
+    <string name="translation_pc_code">Code</string>
+    <string name="translation_pc_paired_ok">PC paired</string>
+    <string name="translation_pc_error">PC: %s</string>
+    <string name="translation_pc_check">Check the connection</string>
+    <string name="translation_pc_unpair">Unpair</string>
+    <string name="translation_pc_online">Online · Claude limits: 5 hours %1$d%%, week %2$d%% · %3$d in the PC queue</string>
+    <string name="translation_engine_label">Translate with</string>
+    <string name="translation_pc_waiting_manga">%d chapters waiting for the PC</string>
+    <string name="translation_pc_waiting_manga_desc">Tap to translate them with Gemini instead</string>
+    <string name="translation_corrections">Slips of the English text corrected</string>
+    <string name="translation_pc_title">Translating on the PC</string>
+    <string name="translation_pc_running">%1$s · chapter %2$s in progress (%3$s)</string>
+    <string name="translation_pc_queued">Queued on the PC, position %d</string>
+    <string name="translation_pc_waiting_count">%d chapters on the PC</string>
 </resources>

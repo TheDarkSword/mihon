@@ -54,6 +54,7 @@ import mihon.translation.context.Character
 import mihon.translation.context.GlossaryEntry
 import mihon.translation.context.SeriesContext
 import mihon.translation.context.label
+import mihon.translation.pc.PcCorrection
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -75,12 +76,14 @@ class SeriesContextScreen(private val mangaId: Long) : Screen() {
         var addingTerm by remember { mutableStateOf(false) }
         var editingCharacter by remember { mutableStateOf<Character?>(null) }
         var query by remember { mutableStateOf("") }
+        var corrections by remember { mutableStateOf(emptyList<PcCorrection>()) }
 
         LaunchedEffect(mangaId) {
             withContext(Dispatchers.IO) {
                 val m = graph.getManga.await(mangaId) ?: return@withContext
                 manga = m
                 series = graph.translationStorage.readContext(m) ?: SeriesContext(series = m.title)
+                corrections = graph.translationStorage.readCorrections(m)
             }
         }
 
@@ -128,7 +131,7 @@ class SeriesContextScreen(private val mangaId: Long) : Screen() {
                 when (tab) {
                     0 -> GlossaryList(ctx.glossary, query, { query = it }) { editingTerm = it }
                     1 -> CharacterList(ctx.characters, query, { query = it }) { editingCharacter = it }
-                    else -> StoryTab(ctx) { arc -> update { it.copy(arcSummary = arc) } }
+                    else -> StoryTab(ctx, corrections) { arc -> update { it.copy(arcSummary = arc) } }
                 }
             }
         }
@@ -279,7 +282,7 @@ private fun CharacterList(
 }
 
 @Composable
-private fun StoryTab(ctx: SeriesContext, onArc: (String) -> Unit) {
+private fun StoryTab(ctx: SeriesContext, corrections: List<PcCorrection>, onArc: (String) -> Unit) {
     var arc by remember(ctx.arcSummary) { mutableStateOf(ctx.arcSummary) }
     Column(
         modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
@@ -294,6 +297,19 @@ private fun StoryTab(ctx: SeriesContext, onArc: (String) -> Unit) {
         if (ctx.chapters.isEmpty()) Empty()
         ctx.chapters.sortedByDescending { it.n }.forEach {
             Text("${it.n.label()}. ${it.summary}", style = MaterialTheme.typography.bodyMedium)
+        }
+        if (corrections.isNotEmpty()) {
+            Text(stringResource(MR.strings.translation_corrections), style = MaterialTheme.typography.titleSmall)
+            corrections.sortedByDescending { it.chapter }.forEach {
+                Column {
+                    Text(
+                        "${stringResource(MR.strings.translation_chapter, it.chapter.label())} · ${it.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text("${it.en} → ${it.it}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
     }
 }

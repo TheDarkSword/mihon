@@ -8,8 +8,10 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import mihon.translation.TranslationPipeline
 import mihon.translation.context.SeriesContext
+import mihon.translation.pc.PcCorrection
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.storage.service.StoragePreferences
@@ -118,6 +120,22 @@ class TranslationStorage(
         write(dir, CONTEXT_FILE, TranslationPipeline.json.encodeToString(SeriesContext.serializer(), ctx))
     }
 
+    /** Lines where the PC followed the series memory instead of a slip in the English scanlation. */
+    fun readCorrections(manga: Manga): List<PcCorrection> = seriesDir(manga)?.findFile(CORRECTIONS_FILE)
+        ?.let { file ->
+            runCatching { TranslationPipeline.json.decodeFromString(CORRECTION_LIST, read(file)) }.getOrNull()
+        }
+        .orEmpty()
+
+    fun writeCorrections(manga: Manga, corrections: List<PcCorrection>) {
+        if (corrections.isEmpty() && seriesDir(manga)?.findFile(CORRECTIONS_FILE) == null) return
+        write(
+            seriesDir(manga, create = true) ?: return,
+            CORRECTIONS_FILE,
+            TranslationPipeline.json.encodeToString(CORRECTION_LIST, corrections),
+        )
+    }
+
     private fun readLink(dir: UniFile): SeriesLink? = dir.findFile(LINK_FILE)
         ?.let { runCatching { TranslationPipeline.json.decodeFromString<SeriesLink>(read(it)) }.getOrNull() }
 
@@ -134,6 +152,8 @@ class TranslationStorage(
         private const val ROOT = "translations"
         const val LINK_FILE = "series.json"
         const val CONTEXT_FILE = "context.json"
+        const val CORRECTIONS_FILE = "corrections.json"
+        private val CORRECTION_LIST = ListSerializer(PcCorrection.serializer())
 
         fun label(number: Double): String = if (number % 1.0 == 0.0) number.toLong().toString() else number.toString()
     }

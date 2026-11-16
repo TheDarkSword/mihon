@@ -29,7 +29,28 @@ data class TranslationJob(
     val recap: RecapRequest? = null,
     /** Letter the saved translation again with the current style, without new requests. */
     val render: Boolean = false,
-)
+    val engine: String = ENGINE_GEMINI,
+    /** Model asked to the PC, empty for the default. */
+    val model: String = "",
+    /** Detection and OCR are done and the package for the PC is ready (or already sent). */
+    val pcPrepared: Boolean = false,
+    /** Id of the job on the PC once the package is uploaded. */
+    val pcRemoteId: String? = null,
+    /** Packages prepared again after the PC lost one: part of the key the PC uses to spot duplicates. */
+    val pcTries: Int = 0,
+) {
+    val onPc get() = engine == ENGINE_PC && recap == null && !render
+
+    /** Sent to the PC, or ready to be sent: nothing to do on the phone until the translation comes back. */
+    val waitingOnPc get() = onPc && pcPrepared
+
+    companion object {
+        const val ENGINE_GEMINI = "gemini"
+        const val ENGINE_PC = "pc"
+        const val MODEL_OPUS = "opus"
+        const val MODEL_SONNET = "sonnet"
+    }
+}
 
 /** Build the series context from the Italian scanlation the reader already read, up to chapter [until]. */
 @Serializable
@@ -63,13 +84,27 @@ class TranslationManager(
     data class Enqueued(val added: Int, val alreadyQueued: Int)
 
     /** Adds the chapters not translated nor queued yet, in reading order, and makes sure the worker runs. */
-    fun enqueue(manga: Manga, chapters: List<Chapter>): Enqueued {
+    fun enqueue(
+        manga: Manga,
+        chapters: List<Chapter>,
+        engine: String = preferences.engine.get(),
+        model: String = preferences.pcModel.get(),
+    ): Enqueued {
         val queued = _queue.value.map { it.chapterId }.toSet()
         val candidates = chapters.filter { it.chapterNumber >= 0 && !storage.isTranslated(manga, it) }
         val jobs = candidates
             .filter { it.id !in queued }
             .sortedBy { it.chapterNumber }
-            .map { TranslationJob(manga.id, it.id, it.chapterNumber, manga.title) }
+            .map {
+                TranslationJob(
+                    manga.id,
+                    it.id,
+                    it.chapterNumber,
+                    manga.title,
+                    engine = engine,
+                    model = if (engine == TranslationJob.ENGINE_PC) model else "",
+                )
+            }
         if (jobs.isNotEmpty()) {
             _queue.update { inReadingOrder(it + jobs) }
             save()
@@ -78,9 +113,49 @@ class TranslationManager(
         return Enqueued(jobs.size, candidates.size - jobs.size)
     }
 
-    /** Resumes a queue left behind, e.g. after the app was killed. Blocking. */
+    /**
+     * Resumes a queue left behind, e.g. after the app was killed, and checks the PC for translations ready to
+     * collect. Blocking.
+     */
     fun resumeIfNeeded() {
-        if (_queue.value.isNotEmpty() && hasKey()) TranslationWorker.start(context)
+        val queue = _queue.value
+        val key = hasKey()
+        when {
+            queue.any { it.onPc || it.render || key } -> TranslationWorker.start(context)
+            // Translations redone on the PC at the reader's request
+            preferences.pcAddress.get().isNotBlank() -> PcPollWorker.schedule(context, 0)
+        }
+    }
+
+    /** Replaces the queued job for the same chapter, e.g. once its package for the PC is ready. */
+    fun replace(job: TranslationJob) {
+        _queue.update { queue -> queue.map { if (it.chapterId == job.chapterId) job else it } }
+        save()
+    }
+
+    fun waitingOnPc(mangaId: Long? = null): List<TranslationJob> =
+        _queue.value.filter { it.onPc && (mangaId == null || it.mangaId == mangaId) }
+
+    /**
+     * Moves chapters waiting for the PC to Gemini. Returns the jobs that had already reached the PC, so the
+     * caller can cancel them there.
+     */
+    fun useGemini(mangaId: Long? = null): List<TranslationJob> {
+        val moved = waitingOnPc(mangaId)
+        if (moved.isEmpty()) return emptyList()
+        val ids = moved.map { it.chapterId }.toSet()
+        _queue.update { queue ->
+            queue.map {
+                if (it.chapterId in ids) {
+                    it.copy(engine = TranslationJob.ENGINE_GEMINI, model = "", pcPrepared = false, pcRemoteId = null)
+                } else {
+                    it
+                }
+            }
+        }
+        save()
+        TranslationWorker.start(context)
+        return moved.filter { it.pcRemoteId != null }
     }
 
     /** Queues the already translated chapters for re-rendering with the current text style. */

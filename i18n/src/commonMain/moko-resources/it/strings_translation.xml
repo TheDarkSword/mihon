@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="translation">Traduzione</string>
-    <string name="pref_translation_summary">Chiave Gemini, coda, cache</string>
+    <string name="pref_translation_summary">Traduttore sul PC, chiave Gemini, coda</string>
     <string name="action_translate">Traduci</string>
     <string name="action_translate_more">Traduci…</string>
     <string name="translate_all">Tutti i capitoli</string>
@@ -137,4 +137,43 @@
     <string name="translation_show_desc">Apri la versione italiana quando c\'è</string>
     <string name="translation_auto_desc">Accoda i nuovi capitoli dopo l\'aggiornamento della libreria</string>
     <string name="translation_delete_all_desc">Libera spazio, tiene glossario e contesto</string>
+    <string name="translation_step_send_pc">Invio al PC</string>
+    <string name="translation_step_receive_pc">Ricezione della traduzione dal PC</string>
+    <string name="translation_pc_unreachable">PC non raggiungibile: %d capitoli in attesa</string>
+    <string name="translation_pc_paused">PC in pausa per i limiti di Claude fino alle %1$s · %2$d capitoli in attesa</string>
+    <string name="translation_pc_working">Traduzione sul PC · %d capitoli</string>
+    <string name="translation_pc_not_paired">Abbina il PC in Impostazioni → Traduzione</string>
+    <string name="pref_translation_pc">Traduttore sul PC</string>
+    <string name="pref_translation_pc_device">PC</string>
+    <string name="pref_translation_pc_not_paired">Non abbinato: traduce Claude Code sul tuo PC, sulla stessa Wi-Fi</string>
+    <string name="pref_translation_pc_paired">%1$s · %2$s</string>
+    <string name="pref_translation_engine">Traduttore predefinito</string>
+    <string name="pref_translation_pc_model">Modello sul PC</string>
+    <string name="translation_model_opus">Opus: il migliore, circa 5 minuti a capitolo</string>
+    <string name="translation_model_sonnet">Sonnet: più veloce, circa 2,5 minuti a capitolo</string>
+    <string name="pref_translation_pc_waiting">Capitoli in attesa del PC</string>
+    <string name="pref_translation_pc_waiting_summary">%d capitoli · tocca per tradurli con Gemini</string>
+    <string name="translation_use_gemini_confirm">Tradurre con Gemini i %d capitoli in attesa del PC?</string>
+    <string name="translation_use_gemini">Usa Gemini</string>
+    <string name="translation_pc_pair">Abbina il PC</string>
+    <string name="translation_pc_searching">Cerco il PC sulla Wi-Fi…</string>
+    <string name="translation_pc_none_found">Nessun PC trovato. Controlla che il servizio sia attivo e che il telefono sia sulla stessa Wi-Fi, oppure scrivi l\'indirizzo.</string>
+    <string name="translation_pc_search_again">Cerca di nuovo</string>
+    <string name="translation_pc_address">Indirizzo del PC (es. 192.168.1.10)</string>
+    <string name="translation_pc_request_code">Mostra il codice sul PC</string>
+    <string name="translation_pc_code_hint">Sul PC è comparsa una notifica con un codice di sei cifre</string>
+    <string name="translation_pc_code">Codice</string>
+    <string name="translation_pc_paired_ok">PC abbinato</string>
+    <string name="translation_pc_error">PC: %s</string>
+    <string name="translation_pc_check">Verifica la connessione</string>
+    <string name="translation_pc_unpair">Scollega</string>
+    <string name="translation_pc_online">Online · limiti di Claude: 5 ore %1$d%%, settimana %2$d%% · %3$d nella coda del PC</string>
+    <string name="translation_engine_label">Traduci con</string>
+    <string name="translation_pc_waiting_manga">%d capitoli in attesa del PC</string>
+    <string name="translation_pc_waiting_manga_desc">Tocca per tradurli con Gemini</string>
+    <string name="translation_corrections">Errori del testo inglese corretti</string>
+    <string name="translation_pc_title">Traduzione sul PC</string>
+    <string name="translation_pc_running">%1$s · capitolo %2$s in traduzione (%3$s)</string>
+    <string name="translation_pc_queued">In coda sul PC, posizione %d</string>
+    <string name="translation_pc_waiting_count">%d capitoli sul PC</string>
 </resources>

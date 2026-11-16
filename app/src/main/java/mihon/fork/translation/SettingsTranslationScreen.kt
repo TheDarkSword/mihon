@@ -168,7 +168,9 @@ object SettingsTranslationScreen : SearchableSettings {
         }
 
         val ok = stringResource(MR.strings.pref_gemini_key_ok)
+        val pcGroup = pcTranslatorGroup()
         return listOf(
+            pcGroup,
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.pref_translation_api),
                 preferenceItems = listOf(

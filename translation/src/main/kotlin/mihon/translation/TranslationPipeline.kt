@@ -17,6 +17,10 @@ import mihon.translation.model.Detection
 import mihon.translation.model.TextBlock
 import mihon.translation.model.TranslatedLine
 import mihon.translation.ocr.TextReader
+import mihon.translation.pc.PcImageSpec
+import mihon.translation.pc.PcJobSpec
+import mihon.translation.pc.PcLineSpec
+import mihon.translation.pc.PcPackage
 import mihon.translation.render.TextStyle
 import mihon.translation.render.Typesetter
 import java.io.File
@@ -73,25 +77,10 @@ class TranslationPipeline(
         val checkpoint = cache.entry(key)
         var resumedFrom: String? = null
         openStrip(input).use { strip ->
-            val detections = checkpoint.load(STAGE_DETECT, ListSerializer(Detection.serializer()))
-                ?.also { resumedFrom = STAGE_DETECT }
-                ?: run {
-                    progress("Detecting text on ${strip.slots.size} pages")
-                    TextDetector(context).use { detector ->
-                        detector.detect(strip) { i, n -> if (i % 20 == 0) progress("Detecting: window $i/$n") }
-                    }.also { checkpoint.save(STAGE_DETECT, ListSerializer(Detection.serializer()), it) }
-                }
+            val detections = detect(strip, checkpoint, progress) { resumedFrom = it }
             val detected = System.currentTimeMillis()
-
-            val rawBlocks = checkpoint.load(STAGE_OCR, ListSerializer(TextBlock.serializer()))
-                ?.also { resumedFrom = STAGE_OCR }
-                ?: run {
-                    progress("Reading ${detections.size} regions")
-                    TextReader().use { it.read(strip, detections) }
-                        .also { checkpoint.save(STAGE_OCR, ListSerializer(TextBlock.serializer()), it) }
-                }
+            val blocks = read(strip, checkpoint, detections, progress) { resumedFrom = it }
             val read = System.currentTimeMillis()
-            val blocks = dedupe(rawBlocks)
 
             val draft = checkpoint.load(STAGE_DRAFT, ChapterTranslator.Draft.serializer())
                 ?.also { resumedFrom = STAGE_DRAFT }
@@ -155,6 +144,72 @@ class TranslationPipeline(
             result.context to timings
         }
     }
+
+    private suspend fun detect(
+        strip: Strip,
+        checkpoint: CheckpointCache.Entry,
+        progress: (String) -> Unit,
+        resumed: (String) -> Unit,
+    ): List<Detection> = checkpoint.load(STAGE_DETECT, ListSerializer(Detection.serializer()))
+        ?.also { resumed(STAGE_DETECT) }
+        ?: run {
+            progress("Detecting text on ${strip.slots.size} pages")
+            TextDetector(context).use { detector ->
+                detector.detect(strip) { i, n -> if (i % 20 == 0) progress("Detecting: window $i/$n") }
+            }.also { checkpoint.save(STAGE_DETECT, ListSerializer(Detection.serializer()), it) }
+        }
+
+    private suspend fun read(
+        strip: Strip,
+        checkpoint: CheckpointCache.Entry,
+        detections: List<Detection>,
+        progress: (String) -> Unit,
+        resumed: (String) -> Unit,
+    ): List<TextBlock> {
+        val raw = checkpoint.load(STAGE_OCR, ListSerializer(TextBlock.serializer()))
+            ?.also { resumed(STAGE_OCR) }
+            ?: run {
+                progress("Reading ${detections.size} regions")
+                TextReader().use { it.read(strip, detections) }
+                    .also { checkpoint.save(STAGE_OCR, ListSerializer(TextBlock.serializer()), it) }
+            }
+        return dedupe(raw)
+    }
+
+    /**
+     * Detection and OCR on the phone, then the package the PC translates: the lines and the annotated page cuts,
+     * written to [zip] with the job.json built by [spec]. Returns every text block, needed later for lettering.
+     */
+    suspend fun prepareForPc(
+        key: String,
+        input: File,
+        series: String,
+        zip: File,
+        progress: (String) -> Unit,
+        spec: (List<PcLineSpec>, List<PcImageSpec>) -> PcJobSpec,
+    ): List<TextBlock> = withContext(Dispatchers.Default) {
+        val checkpoint = cache.entry(key)
+        openStrip(input).use { strip ->
+            val detections = detect(strip, checkpoint, progress) {}
+            val blocks = read(strip, checkpoint, detections, progress) {}
+            val lines = PcPackage.lines(blocks, series)
+            val ids = lines.map { it.id }.toSet()
+            progress("Preparing ${lines.size} lines for the PC")
+            zip.parentFile?.mkdirs()
+            val tmp = File(zip.path + ".tmp")
+            ZipOutputStream(tmp.outputStream().buffered()).use { out ->
+                val images = PcPackage.images(strip, blocks.filter { it.id in ids }) { name, bytes ->
+                    out.putStored(name, bytes)
+                }
+                out.putStored("job.json", json.encodeToString(spec(lines, images)).toByteArray())
+            }
+            tmp.renameTo(zip)
+            blocks
+        }
+    }
+
+    /** Detection and OCR results are kept until the chapter is lettered, then they can go. */
+    fun dropCheckpoints(key: String) = cache.entry(key).delete()
 
     /**
      * Letters a chapter again from the translation saved in its CBZ, on fresh original pages: no detection,
